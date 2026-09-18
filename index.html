@@ -131,11 +131,12 @@
                     <p id="ocr-status" class="text-xs text-purple-500 text-center hidden">🔍 認識中...</p>
                 </div>
 
-                <!-- 手書き認識結果の確認・修正画面 -->
+                <!-- 手書き認識結果の確認・修正画面（1文字ずつボックスで修正できる） -->
                 <div id="handwriting-review" class="space-y-2 hidden">
-                    <p class="text-xs text-gray-500 text-center">認識結果です。間違っていれば修正してから採点してください</p>
-                    <input type="text" id="review-input-word" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" class="w-full px-4 py-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-lg text-center hidden" />
-                    <textarea id="review-input-sentence" rows="3" autocomplete="off" class="w-full px-4 py-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-base resize-none hidden"></textarea>
+                    <p class="text-xs text-gray-500 text-center">認識結果です。文字ごとにタップして修正できます（✕で削除、＋で追加）</p>
+                    <div id="char-box-container" class="flex flex-wrap gap-1.5 items-end justify-center p-3 border-2 border-purple-200 rounded-lg bg-purple-50 min-h-[4rem]">
+                        <button id="add-char-box-btn" type="button" class="w-9 h-11 flex items-center justify-center text-lg font-bold text-purple-500 border-2 border-dashed border-purple-300 rounded-md hover:bg-purple-100 transition">＋</button>
+                    </div>
                     <div class="flex gap-2">
                         <button id="review-redraw-btn" type="button" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
                             書き直す
@@ -227,8 +228,8 @@
         const ocrStatus = document.getElementById('ocr-status');
         const handwritingNote = document.getElementById('handwriting-note');
         const handwritingReview = document.getElementById('handwriting-review');
-        const reviewInputWord = document.getElementById('review-input-word');
-        const reviewInputSentence = document.getElementById('review-input-sentence');
+        const charBoxContainer = document.getElementById('char-box-container');
+        const addCharBoxBtn = document.getElementById('add-char-box-btn');
         const reviewRedrawBtn = document.getElementById('review-redraw-btn');
         const reviewConfirmBtn = document.getElementById('review-confirm-btn');
         const submitBtn = document.getElementById('submit-btn');
@@ -648,19 +649,114 @@
             handwritingReview.classList.remove('hidden');
             submitBtn.classList.add('hidden');
 
-            const isWord = (contentType === 'word');
-            reviewInputWord.classList.toggle('hidden', !isWord);
-            reviewInputSentence.classList.toggle('hidden', isWord);
-
-            const activeEl = isWord ? reviewInputWord : reviewInputSentence;
-            activeEl.value = recognizedText;
-            activeEl.disabled = false;
-            activeEl.focus();
-            if (typeof activeEl.select === 'function') activeEl.select();
+            renderCharBoxes(recognizedText);
+            const inputs = getCharInputs();
+            if (inputs.length > 0) {
+                inputs[inputs.length - 1].focus();
+            }
         }
 
+        // ===== 1文字ずつのボックス編集UI =====
+
+        function getCharInputs() {
+            return Array.from(charBoxContainer.querySelectorAll('input.char-box'));
+        }
+
+        // 認識結果のテキストから、1文字ずつのボックスを作り直す
+        function renderCharBoxes(text) {
+            getCharInputs().forEach(inp => inp.closest('.char-box-wrap').remove());
+            const chars = Array.from(text);
+            if (chars.length === 0) chars.push(''); // 何も認識できなかった場合も、空のボックスを1つ表示
+            chars.forEach(ch => {
+                const wrapper = createCharBox(ch);
+                charBoxContainer.insertBefore(wrapper, addCharBoxBtn);
+            });
+        }
+
+        // 1文字分のボックス（入力欄＋削除ボタン）を作る
+        function createCharBox(ch) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'char-box-wrap flex flex-col items-center gap-0.5';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.maxLength = 1;
+            input.autocomplete = 'off';
+            input.autocapitalize = 'off';
+            input.autocorrect = 'off';
+            input.spellcheck = false;
+            input.className = 'char-box w-9 h-11 text-center text-lg font-bold border-2 border-purple-300 rounded-md focus:outline-none focus:border-purple-500 bg-white';
+            input.value = ch;
+
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.textContent = '✕';
+            delBtn.className = 'text-[10px] leading-none text-gray-400 hover:text-red-500';
+            delBtn.addEventListener('click', () => {
+                const inputs = getCharInputs();
+                const idx = inputs.indexOf(input);
+                wrapper.remove();
+                const remaining = getCharInputs();
+                if (remaining.length > 0) {
+                    remaining[Math.max(0, Math.min(idx, remaining.length - 1))].focus();
+                }
+            });
+
+            input.addEventListener('focus', () => input.select());
+
+            // 1文字入力したら自動で次のボックスへ移動（最後なら新しいボックスを追加）
+            input.addEventListener('input', () => {
+                if (input.value === '') return;
+                const inputs = getCharInputs();
+                const idx = inputs.indexOf(input);
+                if (idx === inputs.length - 1) {
+                    const newWrapper = createCharBox('');
+                    charBoxContainer.insertBefore(newWrapper, addCharBoxBtn);
+                    newWrapper.querySelector('input').focus();
+                } else {
+                    inputs[idx + 1].focus();
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                const inputs = getCharInputs();
+                const idx = inputs.indexOf(input);
+
+                if (e.key === 'Backspace' && input.value === '') {
+                    // 空のボックスでBackspace：そのボックスを削除して前のボックスへ
+                    e.preventDefault();
+                    if (idx > 0) {
+                        wrapper.remove();
+                        const remaining = getCharInputs();
+                        remaining[idx - 1].focus();
+                    }
+                } else if (e.key === 'ArrowLeft' && idx > 0) {
+                    e.preventDefault();
+                    inputs[idx - 1].focus();
+                } else if (e.key === 'ArrowRight' && idx < inputs.length - 1) {
+                    e.preventDefault();
+                    inputs[idx + 1].focus();
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    reviewConfirmBtn.click();
+                }
+            });
+
+            wrapper.appendChild(input);
+            wrapper.appendChild(delBtn);
+            return wrapper;
+        }
+
+        // 「＋」ボタン：末尾に空のボックスを1つ追加する
+        addCharBoxBtn.addEventListener('click', () => {
+            const wrapper = createCharBox('');
+            charBoxContainer.insertBefore(wrapper, addCharBoxBtn);
+            wrapper.querySelector('input').focus();
+        });
+
         function getReviewValue() {
-            return ((contentType === 'word') ? reviewInputWord : reviewInputSentence).value.trim();
+            return getCharInputs().map(inp => inp.value).join('').trim();
         }
 
         // 手書きキャンバスの内容をOCR認識する（この時点では採点しない。
@@ -712,19 +808,7 @@
             checkAnswer(val);
         });
 
-        // 確認画面（単語）：Enterキーで採点
-        reviewInputWord.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') reviewConfirmBtn.click();
-        });
-
-        // 確認画面（例文）：Enterは改行に使い、Ctrl(⌘)+Enterで採点
-        reviewInputSentence.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                e.stopPropagation();
-                reviewConfirmBtn.click();
-            }
-        });
+        // 確認画面のEnterキーでの採点は、各文字ボックスのkeydownハンドラ内で処理する
 
         // ===== ファイル読み込み・開始 =====
 
@@ -1112,7 +1196,7 @@
         // 「次の問題へ」待ち状態でのEnterキー対応（両モード共通）
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !nextBtn.classList.contains('hidden') && document.activeElement !== retestThresholdInput) {
-                if (isWaitingForNext && document.activeElement !== answerInputSentence && document.activeElement !== reviewInputSentence) {
+                if (isWaitingForNext && document.activeElement !== answerInputSentence) {
                     showNextWord();
                 }
             }
