@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>例文キーポイントタイピングテスト</title>
+    <title>単語・例文タイピングテスト</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Excelファイルを読み込むためのライブラリ（SheetJS） -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -14,13 +14,28 @@
 <body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center p-4">
 
     <div class="max-w-lg w-full bg-white rounded-xl shadow-lg p-6 space-y-6">
-        <h1 class="text-2xl font-bold text-center text-blue-600">例文キーポイントタイピングテスト</h1>
+        <h1 class="text-2xl font-bold text-center text-blue-600">単語・例文タイピングテスト</h1>
 
         <!-- 1. ファイルアップロード画面 -->
         <div id="upload-screen" class="space-y-4">
-            <p class="text-sm text-gray-600 text-center">
-                日本語の例文・英語の例文が入ったExcelファイルを選択してスタートしてください。<br>
-                <span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。1行に1例文を入れてください。</span>
+
+            <div class="space-y-2">
+                <p class="text-sm font-semibold text-gray-700">コンテンツの種類</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="content-type" value="word" checked class="accent-blue-500">
+                        単語モード
+                    </label>
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="content-type" value="sentence" class="accent-blue-500">
+                        例文モード
+                    </label>
+                </div>
+            </div>
+
+            <p id="upload-desc" class="text-sm text-gray-600 text-center">
+                英単語のExcel形式のファイルを選択してスタートしてください。<br>
+                <span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。</span>
             </p>
             <input type="file" id="file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500
                 file:mr-4 file:py-2 file:px-4
@@ -36,23 +51,24 @@
                     <input type="radio" name="test-mode" value="endless" checked class="mt-1 accent-blue-500">
                     <span class="text-sm">
                         <strong class="text-gray-800">エンドレスモード</strong><br>
-                        <span class="text-xs text-gray-500">間違えた例文は正解するまで繰り返し出題されます</span>
+                        <span id="endless-desc" class="text-xs text-gray-500">間違えた単語は正解するまで繰り返し出題されます</span>
                     </span>
                 </label>
                 <label class="flex items-start gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50">
                     <input type="radio" name="test-mode" value="real" class="mt-1 accent-orange-500">
                     <span class="text-sm">
                         <strong class="text-gray-800">本当のテストモード</strong><br>
-                        <span class="text-xs text-gray-500">繰り返しなし、全例文を1回ずつだけ出題する一発勝負です</span>
+                        <span id="real-desc" class="text-xs text-gray-500">繰り返しなし、全単語を1回ずつだけ出題する一発勝負です</span>
                     </span>
                 </label>
             </div>
 
-            <div class="space-y-2 p-3 border-2 border-gray-200 rounded-lg">
+            <!-- 例文モードのときだけ表示される採点方法選択 -->
+            <div id="grading-mode-section" class="space-y-2 p-3 border-2 border-gray-200 rounded-lg hidden">
                 <p class="text-sm font-semibold text-gray-700">採点方法</p>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="radio" name="grading-mode" value="strict" checked class="accent-purple-500">
-                    完全一致（句読点・大文字小文字・短縮形の違いを除く）
+                    完全一致（句読点・大文字小文字を除く）
                 </label>
                 <label class="flex items-center gap-2 text-sm">
                     <input type="radio" name="grading-mode" value="keypoint" class="accent-purple-500">
@@ -73,18 +89,20 @@
         <!-- 2. クイズ画面 -->
         <div id="quiz-screen" class="space-y-6 hidden">
             <div class="flex justify-between items-center text-sm font-semibold text-gray-500">
-                <span id="progress-label">残り例文数: <span id="progress-value" class="text-blue-600 text-lg">0</span></span>
+                <span id="progress-label">残り単語数: <span id="progress-value" class="text-blue-600 text-lg">0</span></span>
                 <span>⏱ <span id="timer-display" class="text-blue-600 text-lg">0:00</span></span>
             </div>
 
             <div class="text-center space-y-2">
                 <p class="text-gray-500 text-sm">以下の日本語を英語にしてください</p>
-                <h2 id="question-text" class="text-xl font-bold text-gray-800 break-words leading-relaxed">日本語の例文</h2>
+                <h2 id="question-text" class="text-2xl font-bold text-gray-800 break-words leading-relaxed">日本語</h2>
             </div>
 
             <div class="space-y-4">
-                <textarea id="answer-input" rows="3" autocomplete="off" placeholder="英語の例文を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-base resize-none"></textarea>
-                <p class="text-xs text-gray-400 text-center">Ctrl(⌘)+Enter で回答</p>
+                <input type="text" id="answer-input-word" autocomplete="off" placeholder="英語を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-lg text-center" />
+                <textarea id="answer-input-sentence" rows="3" autocomplete="off" placeholder="英語の例文を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-base resize-none hidden"></textarea>
+                <p id="input-hint-word" class="text-xs text-gray-400 text-center">Enter で回答</p>
+                <p id="input-hint-sentence" class="text-xs text-gray-400 text-center hidden">Ctrl(⌘)+Enter で回答</p>
                 <button id="submit-btn" class="w-full py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition">
                     回答する
                 </button>
@@ -102,12 +120,12 @@
         <!-- 3. 結果画面 -->
         <div id="result-screen" class="space-y-4 hidden">
             <h2 id="result-title" class="text-3xl font-bold text-green-500 text-center">🎉 全問クリア！</h2>
-            <p id="result-subtitle" class="text-gray-600 text-center">お疲れ様でした。すべての例文をマスターしました！</p>
+            <p id="result-subtitle" class="text-gray-600 text-center">お疲れ様でした。すべてマスターしました！</p>
             <p id="result-stats" class="text-center text-sm font-semibold text-gray-700"></p>
 
             <div class="border border-gray-200 rounded-lg overflow-hidden">
                 <div class="grid grid-cols-4 gap-1 bg-gray-100 text-xs font-semibold text-gray-600 px-3 py-2">
-                    <span>例文</span>
+                    <span id="result-header-ja">単語</span>
                     <span>英語</span>
                     <span class="text-right">間違え</span>
                     <span class="text-right">発音</span>
@@ -119,7 +137,7 @@
 
             <!-- 再テスト機能：エンドレスモードのときのみ表示 -->
             <div id="retest-section" class="space-y-2 pt-2 border-t border-gray-200">
-                <p class="text-sm text-gray-600 text-center">何回以上間違えた例文を再テストしますか？</p>
+                <p id="retest-label" class="text-sm text-gray-600 text-center">何回以上間違えた単語を再テストしますか？</p>
                 <div class="flex gap-2 items-center">
                     <input type="number" id="retest-threshold" min="1" value="1" class="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg text-center focus:outline-none focus:border-orange-500" />
                     <span class="text-sm text-gray-500">回以上</span>
@@ -141,6 +159,10 @@
         const fileInput = document.getElementById('file-input');
         const startBtn = document.getElementById('start-btn');
         const uploadError = document.getElementById('upload-error');
+        const uploadDesc = document.getElementById('upload-desc');
+        const gradingModeSection = document.getElementById('grading-mode-section');
+        const endlessDesc = document.getElementById('endless-desc');
+        const realDesc = document.getElementById('real-desc');
 
         const uploadScreen = document.getElementById('upload-screen');
         const quizScreen = document.getElementById('quiz-screen');
@@ -150,7 +172,10 @@
         const progressValue = document.getElementById('progress-value');
         const timerDisplay = document.getElementById('timer-display');
         const questionText = document.getElementById('question-text');
-        const answerInput = document.getElementById('answer-input');
+        const answerInputWord = document.getElementById('answer-input-word');
+        const answerInputSentence = document.getElementById('answer-input-sentence');
+        const inputHintWord = document.getElementById('input-hint-word');
+        const inputHintSentence = document.getElementById('input-hint-sentence');
         const submitBtn = document.getElementById('submit-btn');
         const nextBtn = document.getElementById('next-btn');
         const feedbackArea = document.getElementById('feedback-area');
@@ -159,23 +184,55 @@
         const resultTitle = document.getElementById('result-title');
         const resultSubtitle = document.getElementById('result-subtitle');
         const resultStats = document.getElementById('result-stats');
+        const resultHeaderJa = document.getElementById('result-header-ja');
         const retestSection = document.getElementById('retest-section');
+        const retestLabel = document.getElementById('retest-label');
         const retestThresholdInput = document.getElementById('retest-threshold');
         const retestBtn = document.getElementById('retest-btn');
         const retestError = document.getElementById('retest-error');
 
-        let allWords = [];       // 現在のラウンドの全例文（間違えた回数を保持し続ける、結果画面表示用）
+        let allWords = [];       // 現在のラウンドの全項目（間違えた回数を保持し続ける、結果画面表示用）
         let vocabQueue = [];
         let currentWord = null;
         let isWaitingForNext = false;
         let isRetestRound = false;   // 再テスト中かどうか
+        let contentType = 'word';    // 'word' または 'sentence'
         let testMode = 'endless';    // 'endless' または 'real'
-        let gradingMode = 'strict';  // 'strict' または 'keypoint'
+        let gradingMode = 'strict';  // 'strict' または 'keypoint'（例文モードのみ使用）
         let totalWordsInRound = 0;   // 本当のテストモードの進捗表示に使用
         let correctCount = 0;        // 本当のテストモードの正答数
 
         let timerInterval = null;
         let elapsedSeconds = 0;
+
+        // ===== コンテンツ種類（単語 / 例文）に応じたUI切り替え =====
+
+        function applyContentTypeUI() {
+            const selected = document.querySelector('input[name="content-type"]:checked').value;
+
+            if (selected === 'word') {
+                uploadDesc.innerHTML = '英単語のExcel形式のファイルを選択してスタートしてください。<br><span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。</span>';
+                gradingModeSection.classList.add('hidden');
+                endlessDesc.textContent = '間違えた単語は正解するまで繰り返し出題されます';
+                realDesc.textContent = '繰り返しなし、全単語を1回ずつだけ出題する一発勝負です';
+                progressLabel.firstChild.textContent = '残り単語数: ';
+                resultHeaderJa.textContent = '単語';
+                retestLabel.textContent = '何回以上間違えた単語を再テストしますか？';
+            } else {
+                uploadDesc.innerHTML = '日本語の例文・英語の例文が入ったExcelファイルを選択してスタートしてください。<br><span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。1行に1例文を入れてください。</span>';
+                gradingModeSection.classList.remove('hidden');
+                endlessDesc.textContent = '間違えた例文は正解するまで繰り返し出題されます';
+                realDesc.textContent = '繰り返しなし、全例文を1回ずつだけ出題する一発勝負です';
+                progressLabel.firstChild.textContent = '残り例文数: ';
+                resultHeaderJa.textContent = '例文';
+                retestLabel.textContent = '何回以上間違えた例文を再テストしますか？';
+            }
+        }
+
+        document.querySelectorAll('input[name="content-type"]').forEach(el => {
+            el.addEventListener('change', applyContentTypeUI);
+        });
+        applyContentTypeUI();
 
         // ===== ユーティリティ関数 =====
 
@@ -197,7 +254,7 @@
             }[ch]));
         }
 
-        // 文を正規化（句読点除去・小文字化・空白整理）
+        // 文を正規化（句読点除去・小文字化・空白整理）— 例文の完全一致採点、キーワード抽出の両方で使用
         function normalizeSentence(str) {
             return String(str)
                 .toLowerCase()
@@ -206,85 +263,8 @@
                 .trim();
         }
 
-        // ===== 短縮形（isn't / is not など）の吸収 =====
-
-        // 単独で覚えさせたい不規則な短縮形
-        const FIXED_EXPANSIONS = {
-            "can't":  ["can not"],
-            "cannot": ["can not"],
-            "won't":  ["will not"],
-            "shan't": ["shall not"],
-            "let's":  ["let us"],
-            "y'all":  ["you all"],
-            "gonna":  ["going to"],
-            "wanna":  ["want to"],
-            "gotta":  ["got to"],
-            "ain't":  ["am not", "is not", "are not", "has not", "have not"]
-        };
-
-        // 1トークンを、あり得る展開形の配列にする（'s や 'd は複数の可能性を返す）
-        function expandToken(tok) {
-            if (FIXED_EXPANSIONS[tok]) return FIXED_EXPANSIONS[tok];
-            let m;
-            if ((m = tok.match(/^(.+)n't$/)))  return [m[1] + " not"];
-            if ((m = tok.match(/^(.+)'ll$/)))  return [m[1] + " will"];
-            if ((m = tok.match(/^(.+)'re$/)))  return [m[1] + " are"];
-            if ((m = tok.match(/^(.+)'ve$/)))  return [m[1] + " have"];
-            if ((m = tok.match(/^(.+)'m$/)))   return [m[1] + " am"];
-            if ((m = tok.match(/^(.+)'s$/)))   return [m[1] + " is", m[1] + " has"];
-            if ((m = tok.match(/^(.+)'d$/)))   return [m[1] + " would", m[1] + " had"];
-            return [tok];
-        }
-
-        // アポストロフィだけ残して正規化（展開処理の前段）
-        function normalizeKeepApostrophe(str) {
-            return String(str)
-                .toLowerCase()
-                .replace(/[\u2018\u2019\u02BC]/g, "'")
-                .replace(/[.,!?;:"()\-]/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-
-        // 文を「あり得る展開形」の配列にする（短縮形は展開後の形に統一される）
-        function sentenceVariants(str) {
-            const tokens = normalizeKeepApostrophe(str).split(' ').filter(Boolean);
-            let results = [''];
-            for (const tok of tokens) {
-                const opts = expandToken(tok);
-                const next = [];
-                for (const base of results) {
-                    for (const o of opts) next.push(base ? base + ' ' + o : o);
-                }
-                results = next.length > 64 ? next.slice(0, 64) : next;
-            }
-            return results.map(s => s.replace(/'/g, '').replace(/\s+/g, ' ').trim());
-        }
-
-        // 短縮形の違いを無視して2つの文が一致するか判定
-        function sentencesMatch(a, b) {
-            const setB = new Set(sentenceVariants(b));
-            return sentenceVariants(a).some(v => setB.has(v));
-        }
-
-        // 単語同士が（短縮形の違いを無視して）同じか判定
-        function tokensEquivalent(a, b) {
-            return sentencesMatch(a, b);
-        }
-
-        // 文に含まれる単語を、展開形も含めてすべて集めたSetを返す
-        function tokenSet(str) {
-            const set = new Set();
-            for (const variant of sentenceVariants(str)) {
-                for (const t of variant.split(' ')) {
-                    if (t) set.add(t);
-                }
-            }
-            return set;
-        }
-
         function tokenize(str) {
-            return sentenceVariants(str)[0].split(' ').filter(Boolean);
+            return normalizeSentence(str).split(' ').filter(Boolean);
         }
 
         // ストップワード（キーワード自動抽出時に除外する一般的な語）
@@ -346,7 +326,7 @@
                 utterance.lang = 'en-US';
             }
 
-            utterance.rate = 0.95;
+            utterance.rate = (contentType === 'word') ? 1.0 : 0.95;
             utterance.pitch = 1.2;
             speechSynthesis.speak(utterance);
         }
@@ -361,7 +341,30 @@
             return btn;
         }
 
-        // 単語単位で入力とお手本を比較し、異なる単語をハイライトする（文章向けの差分表示）
+        // 単語モード：1文字ずつ比較して間違っている箇所をハイライト
+        function buildSpellDiff(rawInput, correctWord) {
+            const maxLen = Math.max(rawInput.length, correctWord.length);
+            let userHtml = '';
+            let correctHtml = '';
+
+            for (let i = 0; i < maxLen; i++) {
+                const uChar = rawInput[i] ?? '';
+                const cChar = correctWord[i] ?? '';
+                const isMatch = uChar !== '' && uChar.toLowerCase() === cChar.toLowerCase();
+
+                if (uChar !== '') {
+                    const cls = isMatch ? 'text-gray-500' : 'text-red-600 font-bold underline';
+                    userHtml += `<span class="${cls}">${escapeHtml(uChar)}</span>`;
+                }
+                if (cChar !== '') {
+                    const cls = isMatch ? 'text-gray-800' : 'text-red-600 font-bold underline';
+                    correctHtml += `<span class="${cls}">${escapeHtml(cChar)}</span>`;
+                }
+            }
+            return { userHtml, correctHtml };
+        }
+
+        // 例文モード：単語単位で入力とお手本を比較し、異なる単語をハイライト
         function buildWordDiff(rawInput, correctSentence) {
             const userTokens = String(rawInput).trim().split(/\s+/).filter(Boolean);
             const correctTokens = String(correctSentence).trim().split(/\s+/).filter(Boolean);
@@ -373,7 +376,7 @@
             for (let i = 0; i < maxLen; i++) {
                 const uTok = userTokens[i] ?? '';
                 const cTok = correctTokens[i] ?? '';
-                const isMatch = uTok !== '' && cTok !== '' && tokensEquivalent(uTok, cTok);
+                const isMatch = uTok !== '' && normalizeSentence(uTok) === normalizeSentence(cTok);
 
                 if (uTok !== '') {
                     const cls = isMatch ? 'text-gray-500' : 'text-red-600 font-bold underline';
@@ -389,12 +392,8 @@
 
         // キーポイント判定：必須キーワードがすべて含まれているかチェック
         function checkKeypoints(rawInput, keywords) {
-            const inputTokens = tokenSet(rawInput);
-            const missing = keywords.filter(k => {
-                // キーワードが複数語（またはit'sのような短縮形）の場合も展開して全語チェック
-                const needed = tokenize(k);
-                return !needed.every(t => inputTokens.has(t));
-            });
+            const inputTokens = new Set(tokenize(rawInput));
+            const missing = keywords.filter(k => !inputTokens.has(normalizeSentence(k)));
             return { passed: missing.length === 0, missing };
         }
 
@@ -429,6 +428,29 @@
             return `${m}分${String(s).padStart(2, '0')}秒`;
         }
 
+        // ===== 回答入力欄のヘルパー（単語モード=input / 例文モード=textarea） =====
+
+        function getAnswerElement() {
+            return (contentType === 'word') ? answerInputWord : answerInputSentence;
+        }
+
+        function getAnswerValue() {
+            return getAnswerElement().value.trim();
+        }
+
+        function setAnswerValue(val) {
+            getAnswerElement().value = val;
+        }
+
+        function focusAnswerInput() {
+            getAnswerElement().focus();
+        }
+
+        function setAnswerDisabled(disabled) {
+            answerInputWord.disabled = disabled;
+            answerInputSentence.disabled = disabled;
+        }
+
         // ===== ファイル読み込み・開始 =====
 
         fileInput.addEventListener('change', (e) => {
@@ -439,6 +461,7 @@
             const file = fileInput.files[0];
             if (!file) return;
 
+            contentType = document.querySelector('input[name="content-type"]:checked').value;
             const selectedMode = document.querySelector('input[name="test-mode"]:checked').value;
             const selectedGrading = document.querySelector('input[name="grading-mode"]:checked').value;
 
@@ -468,24 +491,30 @@
                                 en = val1;
                             }
 
-                            // C列があればキーワード指定として使用（カンマ区切り）
-                            let keywords = null;
-                            if (row.length >= 3 && row[2] != null && String(row[2]).trim() !== "") {
-                                keywords = String(row[2]).split(',').map(k => k.trim()).filter(Boolean);
-                            } else {
-                                keywords = autoExtractKeywords(en);
+                            const item = { ja, en, mistakes: 0 };
+
+                            if (contentType === 'sentence') {
+                                // C列があればキーワード指定として使用（カンマ区切り）
+                                let keywords = null;
+                                if (row.length >= 3 && row[2] != null && String(row[2]).trim() !== "") {
+                                    keywords = String(row[2]).split(',').map(k => k.trim()).filter(Boolean);
+                                } else {
+                                    keywords = autoExtractKeywords(en);
+                                }
+                                item.keywords = keywords;
                             }
 
-                            vocabList.push({ ja, en, keywords, mistakes: 0 });
+                            vocabList.push(item);
                         }
                     }
 
                     if (vocabList.length === 0) {
-                        throw new Error("例文データが見つかりませんでした。A列とB列にデータがあるか確認してください。");
+                        const label = (contentType === 'word') ? '単語データ' : '例文データ';
+                        throw new Error(`${label}が見つかりませんでした。A列とB列にデータがあるか確認してください。`);
                     }
 
                     testMode = selectedMode;
-                    gradingMode = selectedGrading;
+                    gradingMode = (contentType === 'sentence') ? selectedGrading : 'strict';
                     isRetestRound = false;
                     allWords = vocabList;
                     vocabQueue = shuffleArray([...vocabList]);
@@ -505,6 +534,23 @@
             uploadScreen.classList.add('hidden');
             resultScreen.classList.add('hidden');
             quizScreen.classList.remove('hidden');
+
+            // モードに応じて入力欄（input / textarea）を切り替え
+            if (contentType === 'word') {
+                answerInputWord.classList.remove('hidden');
+                answerInputSentence.classList.add('hidden');
+                inputHintWord.classList.remove('hidden');
+                inputHintSentence.classList.add('hidden');
+                questionText.classList.remove('text-xl');
+                questionText.classList.add('text-2xl');
+            } else {
+                answerInputWord.classList.add('hidden');
+                answerInputSentence.classList.remove('hidden');
+                inputHintWord.classList.add('hidden');
+                inputHintSentence.classList.remove('hidden');
+                questionText.classList.remove('text-2xl');
+                questionText.classList.add('text-xl');
+            }
 
             totalWordsInRound = vocabQueue.length;
             correctCount = 0;
@@ -536,9 +582,9 @@
 
             questionText.textContent = currentWord.ja;
 
-            answerInput.value = '';
-            answerInput.disabled = false;
-            answerInput.focus();
+            setAnswerValue('');
+            setAnswerDisabled(false);
+            focusAnswerInput();
 
             submitBtn.classList.remove('hidden');
             nextBtn.classList.add('hidden');
@@ -552,22 +598,24 @@
                 return;
             }
 
-            const rawInput = answerInput.value.trim();
-            if (rawInput === '') return;
+            const rawInput = getAnswerValue();
+            if (rawInput === '') return; // 空白入力は無視
 
             let isCorrect;
             let missingKeywords = [];
 
-            if (gradingMode === 'keypoint') {
+            if (contentType === 'sentence' && gradingMode === 'keypoint') {
                 const result = checkKeypoints(rawInput, currentWord.keywords);
                 isCorrect = result.passed;
                 missingKeywords = result.missing;
+            } else if (contentType === 'sentence') {
+                isCorrect = normalizeSentence(rawInput) === normalizeSentence(currentWord.en);
             } else {
-                isCorrect = sentencesMatch(rawInput, currentWord.en);
+                isCorrect = rawInput.toLowerCase() === currentWord.en.toLowerCase();
             }
 
             isWaitingForNext = true;
-            answerInput.disabled = true;
+            setAnswerDisabled(true);
             submitBtn.classList.add('hidden');
             nextBtn.classList.remove('hidden');
             feedbackArea.classList.remove('hidden');
@@ -576,7 +624,11 @@
             if (isCorrect) {
                 correctCount++;
                 feedbackArea.className = 'text-center p-3 rounded-lg bg-green-100 text-green-700 border border-green-300 font-bold space-y-2';
-                feedbackArea.innerHTML = '⭕ 正解！<br><span class="text-sm font-normal text-gray-600">お手本: ' + escapeHtml(currentWord.en) + '</span>';
+                if (contentType === 'sentence') {
+                    feedbackArea.innerHTML = '⭕ 正解！<br><span class="text-sm font-normal text-gray-600">お手本: ' + escapeHtml(currentWord.en) + '</span>';
+                } else {
+                    feedbackArea.innerHTML = '⭕ 正解！';
+                }
 
                 const speakBtn = createSpeakButton(currentWord.en, 'block mx-auto mt-1 text-sm text-green-700 underline');
                 speakBtn.innerHTML = '🔊 発音を聞く';
@@ -587,7 +639,14 @@
                 currentWord.mistakes++;
 
                 let bodyHtml;
-                if (gradingMode === 'keypoint') {
+                if (contentType === 'word') {
+                    const { userHtml, correctHtml } = buildSpellDiff(rawInput, currentWord.en);
+                    bodyHtml = `
+                        ❌ 不正解...<br>
+                        <span class="text-sm font-normal">あなたの回答:</span> <span class="text-lg tracking-wide">${userHtml}</span><br>
+                        <span class="text-sm font-normal">正解:</span> <span class="text-lg font-bold tracking-wide">${correctHtml}</span>
+                    `;
+                } else if (gradingMode === 'keypoint') {
                     bodyHtml = `
                         ❌ 不正解...<br>
                         <span class="text-sm font-normal">お手本:</span> <span class="text-base font-bold">${escapeHtml(currentWord.en)}</span><br>
@@ -624,10 +683,12 @@
         // ===== 結果表示 =====
 
         function renderResults() {
+            const itemLabel = (contentType === 'word') ? '単語' : '例文';
+
             resultTitle.textContent = isRetestRound ? '🎉 再テストクリア！' : '🎉 全問クリア！';
             resultSubtitle.textContent = isRetestRound
-                ? 'お疲れ様でした。再テストの例文をマスターしました！'
-                : 'お疲れ様でした。すべての例文が終了しました！';
+                ? `お疲れ様でした。再テストの${itemLabel}をマスターしました！`
+                : `お疲れ様でした。すべての${itemLabel}が終了しました！`;
 
             const timeText = `⏱ 経過時間: ${formatTime(elapsedSeconds)}`;
             if (testMode === 'real') {
@@ -678,8 +739,10 @@
             }
         }
 
+        // 「〇回以上」間違えた項目だけを対象に再テストを開始する（エンドレスモード専用）
         function startRetest() {
             const threshold = Number(retestThresholdInput.value);
+            const itemLabel = (contentType === 'word') ? '単語' : '例文';
 
             retestError.classList.add('hidden');
 
@@ -692,7 +755,7 @@
             const targetWords = allWords.filter(word => word.mistakes >= threshold);
 
             if (targetWords.length === 0) {
-                retestError.textContent = `${threshold}回以上間違えた例文はありませんでした。`;
+                retestError.textContent = `${threshold}回以上間違えた${itemLabel}はありませんでした。`;
                 retestError.classList.remove('hidden');
                 return;
             }
@@ -709,22 +772,25 @@
         nextBtn.addEventListener('click', showNextWord);
         retestBtn.addEventListener('click', startRetest);
 
-        // 文章入力なのでEnterは改行に使い、Ctrl(⌘)+Enterで回答する
-        answerInput.addEventListener('keydown', (e) => {
+        // 単語モード：Enterキーで回答
+        answerInputWord.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkAnswer();
+        });
+
+        // 例文モード：Enterは改行に使い、Ctrl(⌘)+Enterで回答
+        answerInputSentence.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                e.stopPropagation();   // documentのリスナーまで伝播させない（採点結果が消えるのを防ぐ）
                 checkAnswer();
             }
         });
 
+        // 「次の問題へ」待ち状態でのEnterキー対応（両モード共通）
         document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter') return;
-            if (e.ctrlKey || e.metaKey) return;               // 回答用ショートカットはここでは処理しない
-            if (document.activeElement === nextBtn) return;   // ボタン自身のclickに任せる（二重実行防止）
-            if (document.activeElement === retestThresholdInput) return;
-            if (!nextBtn.classList.contains('hidden') && isWaitingForNext) {
-                showNextWord();
+            if (e.key === 'Enter' && !nextBtn.classList.contains('hidden') && document.activeElement !== retestThresholdInput) {
+                if (isWaitingForNext && document.activeElement !== answerInputSentence) {
+                    showNextWord();
+                }
             }
         });
 
