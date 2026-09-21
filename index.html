@@ -48,7 +48,7 @@
                     </label>
                 </div>
                 <p id="handwriting-note" class="text-xs text-gray-500 hidden">
-                    ※ 手書きモードでは画面に指やマウス・タッチペンで書いた文字をブラウザ内でOCR認識します。認識結果はその場で確認・修正でき、内容を確定してから採点されます。ブロック体（活字体）で大きめに書くと認識精度が上がります。
+                    ※ 手書きモードでは画面に指やマウス・タッチペンで書いた文字をブラウザ内でOCR認識します。書き終えて少し待つと自動で認識され、認識結果が表示されます。違っていたら消しゴムで消して書き直し、合っていたら「回答する」で採点します。ブロック体（活字体）で大きめに書くと認識精度が上がります。
                 </p>
             </div>
 
@@ -122,29 +122,29 @@
                 <textarea id="answer-input-sentence" rows="3" autocomplete="off" placeholder="英語の例文を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-base resize-none hidden"></textarea>
 
                 <div id="handwriting-area" class="space-y-2 hidden">
-                    <canvas id="answer-canvas" class="w-full border-2 border-gray-300 rounded-lg bg-white touch-none" style="height:150px; display:block;"></canvas>
+                    <!-- ペンツールバー（ペン／消しゴム／1つ戻す／全消し） -->
                     <div class="flex gap-2">
-                        <button id="clear-canvas-btn" type="button" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
-                            消去
+                        <button id="tool-pen-btn" type="button" data-tool="pen" class="tool-btn flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition">
+                            ✏️ ペン
+                        </button>
+                        <button id="tool-eraser-btn" type="button" data-tool="eraser" class="tool-btn flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition">
+                            🧽 消しゴム
+                        </button>
+                        <button id="undo-canvas-btn" type="button" class="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border-2 border-transparent hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                            ↩︎ 戻す
+                        </button>
+                        <button id="clear-canvas-btn" type="button" class="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border-2 border-transparent hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                            🗑 全消し
                         </button>
                     </div>
-                    <p id="ocr-status" class="text-xs text-purple-500 text-center hidden">🔍 認識中...</p>
-                </div>
-
-                <!-- 手書き認識結果の確認・修正画面（1文字ずつボックスで修正できる） -->
-                <div id="handwriting-review" class="space-y-2 hidden">
-                    <p class="text-xs text-gray-500 text-center">認識結果です。文字ごとにタップして修正できます（✕で削除、＋で追加）</p>
-                    <div id="char-box-container" class="flex flex-wrap gap-1.5 items-end justify-center p-3 border-2 border-purple-200 rounded-lg bg-purple-50 min-h-[4rem]">
-                        <button id="add-char-box-btn" type="button" class="w-9 h-11 flex items-center justify-center text-lg font-bold text-purple-500 border-2 border-dashed border-purple-300 rounded-md hover:bg-purple-100 transition">＋</button>
+                    <canvas id="answer-canvas" class="w-full border-2 border-gray-300 rounded-xl bg-white touch-none" style="height:260px; display:block; cursor:crosshair;"></canvas>
+                    <!-- 手書きの自動認識結果（書き終えて少し待つと自動で更新される） -->
+                    <div class="flex items-center gap-2 px-3 py-2 border-2 border-purple-200 bg-purple-50 rounded-lg min-h-[3.5rem]">
+                        <span class="text-xs text-purple-500 whitespace-nowrap">認識結果</span>
+                        <span id="recognized-text" class="flex-1 text-xl tracking-wide break-words"></span>
+                        <span id="ocr-status" class="text-xs text-purple-500 whitespace-nowrap hidden">🔍 認識中...</span>
                     </div>
-                    <div class="flex gap-2">
-                        <button id="review-redraw-btn" type="button" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
-                            書き直す
-                        </button>
-                        <button id="review-confirm-btn" type="button" class="flex-1 py-2 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition">
-                            この内容で採点する
-                        </button>
-                    </div>
+                    <p class="text-xs text-gray-400 text-center">認識が違っていたら、消しゴムで消して書き直してください</p>
                 </div>
 
                 <p id="input-hint-word" class="text-xs text-gray-400 text-center">Enter で回答</p>
@@ -225,13 +225,11 @@
         const handwritingArea = document.getElementById('handwriting-area');
         const answerCanvas = document.getElementById('answer-canvas');
         const clearCanvasBtn = document.getElementById('clear-canvas-btn');
+        const undoCanvasBtn = document.getElementById('undo-canvas-btn');
+        const toolButtons = document.querySelectorAll('.tool-btn');
         const ocrStatus = document.getElementById('ocr-status');
         const handwritingNote = document.getElementById('handwriting-note');
-        const handwritingReview = document.getElementById('handwriting-review');
-        const charBoxContainer = document.getElementById('char-box-container');
-        const addCharBoxBtn = document.getElementById('add-char-box-btn');
-        const reviewRedrawBtn = document.getElementById('review-redraw-btn');
-        const reviewConfirmBtn = document.getElementById('review-confirm-btn');
+        const recognizedTextEl = document.getElementById('recognized-text');
         const submitBtn = document.getElementById('submit-btn');
         const nextBtn = document.getElementById('next-btn');
         const feedbackArea = document.getElementById('feedback-area');
@@ -264,7 +262,21 @@
         let isDrawing = false;
         let hasDrawing = false;  // キャンバスに何か描かれているか
         let canvasLocked = false; // 回答確定後～次の問題までの間、描画をロックする
-        let handwritingSubState = 'draw'; // 'draw'（描画中）または 'review'（認識結果の確認・修正中）
+        let currentTool = 'pen';  // 'pen' または 'eraser'
+        let undoStack = [];       // 「戻す」用：各操作の直前のキャンバス状態 { img, had }
+        const PEN_WIDTH = 4;
+        const ERASER_WIDTH = 28;
+        const UNDO_LIMIT = 15;
+
+        // 手書きの自動認識（OCR）関連
+        const OCR_IDLE_MS = 700;      // ペンを離してから認識を始めるまでの待ち時間
+        let ocrWorkerPromise = null;  // Tesseract のワーカー（初回に作って使い回す）
+        let ocrConfiguredFor = null;  // ワーカーに設定済みの contentType
+        let ocrPending = 0;           // 実行中の認識の数（「認識中...」表示用）
+        let recognizeTimer = null;
+        let inkVersion = 0;           // キャンバスが変わるたびに増やす（古い認識結果の破棄用）
+        let recognizedText = '';
+        let recognizedVersion = -1;   // recognizedText が対応する inkVersion
 
         let timerInterval = null;
         let elapsedSeconds = 0;
@@ -582,12 +594,67 @@
         }
 
         // キャンバスを白紙に戻す（OCRの認識精度のため、背景は常に白で塗りつぶす）
-        function clearCanvasDisplay() {
-            if (!canvasCtx) return;
+        function fillCanvasWhite() {
             const rect = answerCanvas.getBoundingClientRect();
             canvasCtx.fillStyle = '#ffffff';
             canvasCtx.fillRect(0, 0, rect.width, rect.height);
+        }
+
+        // 新しい問題・キャンバス再初期化用：白紙に戻し、「戻す」の履歴も消す
+        function clearCanvasDisplay() {
+            if (!canvasCtx) return;
+            fillCanvasWhite();
             hasDrawing = false;
+            undoStack = [];
+            updateUndoButton();
+            resetRecognition();
+        }
+
+        // ===== ペンツール（ペン／消しゴム／戻す／全消し） =====
+
+        function updateUndoButton() {
+            undoCanvasBtn.disabled = undoStack.length === 0;
+        }
+
+        // 操作の直前にキャンバスの状態を保存する（「戻す」で復元するため）
+        function pushUndoSnapshot() {
+            undoStack.push({
+                img: canvasCtx.getImageData(0, 0, answerCanvas.width, answerCanvas.height),
+                had: hasDrawing
+            });
+            if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+            updateUndoButton();
+        }
+
+        function undoCanvas() {
+            if (!canvasCtx || canvasLocked || undoStack.length === 0) return;
+            const snap = undoStack.pop();
+            canvasCtx.putImageData(snap.img, 0, 0);
+            hasDrawing = snap.had;
+            updateUndoButton();
+            scheduleRecognition();
+        }
+
+        function selectTool(tool) {
+            currentTool = tool;
+            toolButtons.forEach(btn => {
+                const active = btn.dataset.tool === tool;
+                btn.classList.toggle('bg-purple-500', active);
+                btn.classList.toggle('text-white', active);
+                btn.classList.toggle('border-purple-500', active);
+                btn.classList.toggle('bg-gray-100', !active);
+                btn.classList.toggle('text-gray-700', !active);
+                btn.classList.toggle('border-transparent', !active);
+                btn.classList.toggle('hover:bg-gray-200', !active);
+            });
+            answerCanvas.style.cursor = (tool === 'eraser') ? 'cell' : 'crosshair';
+        }
+
+        // 認識中などはツール操作を無効にする
+        function setCanvasToolsDisabled(disabled) {
+            clearCanvasBtn.disabled = disabled;
+            toolButtons.forEach(btn => { btn.disabled = disabled; });
+            undoCanvasBtn.disabled = disabled || undoStack.length === 0;
         }
 
         function getCanvasPoint(e) {
@@ -597,11 +664,25 @@
 
         function startDrawing(e) {
             if (!canvasCtx || canvasLocked) return; // 回答済み・待機中は描画不可
+            pushUndoSnapshot();
             isDrawing = true;
-            hasDrawing = true;
+            // 書いている間は認識を待たせ、認識中の古い結果も破棄する
+            clearTimeout(recognizeTimer);
+            inkVersion++;
+            const isEraser = (currentTool === 'eraser');
+            if (!isEraser) hasDrawing = true;
+            // 消しゴムは白で塗りつぶす（OCRのため背景は常に白）
+            canvasCtx.strokeStyle = isEraser ? '#ffffff' : '#1f2937';
+            canvasCtx.lineWidth = isEraser ? ERASER_WIDTH : PEN_WIDTH;
+
             const p = getCanvasPoint(e);
             canvasCtx.beginPath();
             canvasCtx.moveTo(p.x, p.y);
+            // タップだけでも点が打てるように（i の点やピリオド用）
+            canvasCtx.lineTo(p.x + 0.01, p.y);
+            canvasCtx.stroke();
+            // キャンバス外に出ても線が途切れないようにする
+            try { answerCanvas.setPointerCapture(e.pointerId); } catch (_) {}
             e.preventDefault();
         }
 
@@ -614,18 +695,32 @@
         }
 
         function stopDrawing() {
+            if (!isDrawing) return;
             isDrawing = false;
+            scheduleRecognition(); // ペンを離したら、少し待って自動で認識する
         }
 
         // マウス・タッチ・ペンをまとめて扱えるPointer Eventsを使用
         answerCanvas.addEventListener('pointerdown', startDrawing);
         answerCanvas.addEventListener('pointermove', drawMove);
         window.addEventListener('pointerup', stopDrawing);
-        answerCanvas.addEventListener('pointerleave', stopDrawing);
+        window.addEventListener('pointercancel', stopDrawing);
 
-        clearCanvasBtn.addEventListener('click', () => {
-            clearCanvasDisplay();
+        toolButtons.forEach(btn => {
+            btn.addEventListener('click', () => selectTool(btn.dataset.tool));
         });
+        undoCanvasBtn.addEventListener('click', undoCanvas);
+
+        // 全消しも「戻す」で取り消せる
+        clearCanvasBtn.addEventListener('click', () => {
+            if (!canvasCtx || canvasLocked || !hasDrawing) return;
+            pushUndoSnapshot();
+            fillCanvasWhite();
+            hasDrawing = false;
+            scheduleRecognition();
+        });
+
+        selectTool('pen');
 
         window.addEventListener('resize', () => {
             if (inputMode === 'handwriting' && !quizScreen.classList.contains('hidden')) {
@@ -633,182 +728,170 @@
             }
         });
 
-        // 手書き入力の「描画」画面／「認識結果の確認・修正」画面を切り替える
+        // ===== 手書き文字の自動認識（書き終えて少し待つと、ボタンなしで自動でOCR） =====
 
+        // 手書き入力の表示を初期状態にする（回答ボタンはこの表示のときだけ「回答する」）
         function showHandwritingDrawView() {
-            handwritingSubState = 'draw';
             handwritingArea.classList.remove('hidden');
-            handwritingReview.classList.add('hidden');
             submitBtn.classList.remove('hidden');
-            submitBtn.textContent = '認識する';
+            submitBtn.textContent = '回答する';
         }
 
-        function showHandwritingReviewView(recognizedText) {
-            handwritingSubState = 'review';
-            handwritingArea.classList.add('hidden');
-            handwritingReview.classList.remove('hidden');
-            submitBtn.classList.add('hidden');
-
-            renderCharBoxes(recognizedText);
-            const inputs = getCharInputs();
-            if (inputs.length > 0) {
-                inputs[inputs.length - 1].focus();
+        function renderRecognizedText() {
+            if (recognizedText === '') {
+                recognizedTextEl.textContent = '手書きで英語を書いてください';
+                recognizedTextEl.className = 'flex-1 text-sm text-gray-400';
+            } else {
+                recognizedTextEl.textContent = recognizedText;
+                recognizedTextEl.className = 'flex-1 text-xl font-bold text-gray-800 tracking-wide break-words';
             }
         }
 
-        // ===== 1文字ずつのボックス編集UI =====
-
-        function getCharInputs() {
-            return Array.from(charBoxContainer.querySelectorAll('input.char-box'));
+        function setRecognizedText(text, version) {
+            recognizedText = text;
+            recognizedVersion = version;
+            renderRecognizedText();
         }
 
-        // 認識結果のテキストから、1文字ずつのボックスを作り直す
-        function renderCharBoxes(text) {
-            getCharInputs().forEach(inp => inp.closest('.char-box-wrap').remove());
-            const chars = Array.from(text);
-            if (chars.length === 0) chars.push(''); // 何も認識できなかった場合も、空のボックスを1つ表示
-            chars.forEach(ch => {
-                const wrapper = createCharBox(ch);
-                charBoxContainer.insertBefore(wrapper, addCharBoxBtn);
-            });
+        // 新しい問題・キャンバス初期化のとき：認識結果と待機中の認識を破棄する
+        function resetRecognition() {
+            clearTimeout(recognizeTimer);
+            recognizeTimer = null;
+            inkVersion++;
+            setRecognizedText('', inkVersion);
         }
 
-        // 1文字分のボックス（入力欄＋削除ボタン）を作る
-        function createCharBox(ch) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'char-box-wrap flex flex-col items-center gap-0.5';
+        // キャンバスが変わったので、少し待ってから自動で認識する（書き足すたびに待ち直す）
+        function scheduleRecognition() {
+            clearTimeout(recognizeTimer);
+            inkVersion++;
+            if (!hasDrawing) {
+                setRecognizedText('', inkVersion);
+                return;
+            }
+            recognizeTimer = setTimeout(recognizeNow, OCR_IDLE_MS);
+        }
 
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.maxLength = 1;
-            input.autocomplete = 'off';
-            input.autocapitalize = 'off';
-            input.autocorrect = 'off';
-            input.spellcheck = false;
-            input.className = 'char-box w-9 h-11 text-center text-lg font-bold border-2 border-purple-300 rounded-md focus:outline-none focus:border-purple-500 bg-white';
-            input.value = ch;
-
-            const delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.textContent = '✕';
-            delBtn.className = 'text-[10px] leading-none text-gray-400 hover:text-red-500';
-            delBtn.addEventListener('click', () => {
-                const inputs = getCharInputs();
-                const idx = inputs.indexOf(input);
-                wrapper.remove();
-                const remaining = getCharInputs();
-                if (remaining.length > 0) {
-                    remaining[Math.max(0, Math.min(idx, remaining.length - 1))].focus();
+        function getOcrWorker() {
+            if (!ocrWorkerPromise) {
+                if (typeof Tesseract === 'undefined') {
+                    return Promise.reject(new Error('Tesseract is not loaded'));
                 }
+                ocrWorkerPromise = Tesseract.createWorker('eng').catch(err => {
+                    ocrWorkerPromise = null; // 次回やり直せるように
+                    throw err;
+                });
+            }
+            return ocrWorkerPromise;
+        }
+
+        // 単語は「1行」、例文は「複数行のブロック」として読ませ、使う文字も絞って精度を上げる
+        async function configureOcrWorker(worker) {
+            if (ocrConfiguredFor === contentType) return;
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+            await worker.setParameters({
+                tessedit_pageseg_mode: (contentType === 'word') ? '7' : '6',
+                tessedit_char_whitelist: (contentType === 'word')
+                    ? letters + "'-"
+                    : letters + "0123456789.,!?'-"
             });
+            ocrConfiguredFor = contentType;
+        }
 
-            input.addEventListener('focus', () => input.select());
-
-            // 1文字入力したら自動で次のボックスへ移動（最後なら新しいボックスを追加）
-            input.addEventListener('input', () => {
-                if (input.value === '') return;
-                const inputs = getCharInputs();
-                const idx = inputs.indexOf(input);
-                if (idx === inputs.length - 1) {
-                    const newWrapper = createCharBox('');
-                    charBoxContainer.insertBefore(newWrapper, addCharBoxBtn);
-                    newWrapper.querySelector('input').focus();
-                } else {
-                    inputs[idx + 1].focus();
-                }
-            });
-
-            input.addEventListener('keydown', (e) => {
-                const inputs = getCharInputs();
-                const idx = inputs.indexOf(input);
-
-                if (e.key === 'Backspace' && input.value === '') {
-                    // 空のボックスでBackspace：そのボックスを削除して前のボックスへ
-                    e.preventDefault();
-                    if (idx > 0) {
-                        wrapper.remove();
-                        const remaining = getCharInputs();
-                        remaining[idx - 1].focus();
+        // 書かれた部分だけを切り出して余白をつけた画像を作る（OCRは余白があるほうが精度が高い）
+        // 何も書かれていない（消しゴムで全部消した）場合は null
+        function buildOcrImage() {
+            const w = answerCanvas.width;
+            const h = answerCanvas.height;
+            const data = canvasCtx.getImageData(0, 0, w, h).data;
+            let minX = w, minY = h, maxX = -1, maxY = -1;
+            for (let y = 0; y < h; y++) {
+                const row = y * w * 4;
+                for (let x = 0; x < w; x++) {
+                    if (data[row + x * 4] < 200) { // 白背景より十分暗い画素 = インク
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
                     }
-                } else if (e.key === 'ArrowLeft' && idx > 0) {
-                    e.preventDefault();
-                    inputs[idx - 1].focus();
-                } else if (e.key === 'ArrowRight' && idx < inputs.length - 1) {
-                    e.preventDefault();
-                    inputs[idx + 1].focus();
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    reviewConfirmBtn.click();
                 }
-            });
+            }
+            if (maxX < 0) return null;
 
-            wrapper.appendChild(input);
-            wrapper.appendChild(delBtn);
-            return wrapper;
+            const ratio = window.devicePixelRatio || 1;
+            const inkW = maxX - minX + 1;
+            const inkH = maxY - minY + 1;
+            // 単語：文字の高さを約80pxに揃える／例文：見た目の大きさ（CSSピクセル）のまま
+            const scale = (contentType === 'word')
+                ? Math.min(2, Math.max(0.3, 80 / inkH))
+                : 1 / ratio;
+            const pad = 24;
+
+            const out = document.createElement('canvas');
+            out.width = Math.max(1, Math.round(inkW * scale)) + pad * 2;
+            out.height = Math.max(1, Math.round(inkH * scale)) + pad * 2;
+            const octx = out.getContext('2d');
+            octx.fillStyle = '#ffffff';
+            octx.fillRect(0, 0, out.width, out.height);
+            octx.drawImage(answerCanvas, minX, minY, inkW, inkH, pad, pad, out.width - pad * 2, out.height - pad * 2);
+            return out;
         }
 
-        // 「＋」ボタン：末尾に空のボックスを1つ追加する
-        addCharBoxBtn.addEventListener('click', () => {
-            const wrapper = createCharBox('');
-            charBoxContainer.insertBefore(wrapper, addCharBoxBtn);
-            wrapper.querySelector('input').focus();
-        });
-
-        function getReviewValue() {
-            return getCharInputs().map(inp => inp.value).join('').trim();
+        function setOcrBusy(delta) {
+            ocrPending += delta;
+            ocrStatus.classList.toggle('hidden', ocrPending <= 0);
         }
 
-        // 手書きキャンバスの内容をOCR認識する（この時点では採点しない。
-        // 結果は確認・修正画面に表示し、ユーザーが内容を確認・修正してから採点する）
-        async function handleRecognizeClick() {
-            if (isWaitingForNext) {
-                showNextWord();
+        async function recognizeNow() {
+            clearTimeout(recognizeTimer);
+            recognizeTimer = null;
+            const version = inkVersion;
+
+            if (!hasDrawing) {
+                setRecognizedText('', version);
                 return;
             }
-            if (!hasDrawing) return; // 何も書かれていない場合は無視
-
-            if (typeof Tesseract === 'undefined') {
-                alert('文字認識ライブラリの読み込みに失敗しました。インターネット接続を確認してください。');
+            const img = buildOcrImage();
+            if (!img) {
+                setRecognizedText('', version);
                 return;
             }
 
-            submitBtn.disabled = true;
-            clearCanvasBtn.disabled = true;
-            ocrStatus.classList.remove('hidden');
-
+            setOcrBusy(1);
             try {
-                const { data: { text } } = await Tesseract.recognize(answerCanvas, 'eng');
-                const recognizedText = text.replace(/\s+/g, ' ').trim();
-                // 認識できなかった場合も、空欄の確認画面を出して手動入力できるようにする
-                showHandwritingReviewView(recognizedText);
+                const worker = await getOcrWorker();
+                await configureOcrWorker(worker);
+                const { data: { text } } = await worker.recognize(img);
+                // 認識している間に書き足し・消去された場合は、この結果を捨てる（その後の認識が走る）
+                if (version === inkVersion) {
+                    setRecognizedText(text.replace(/\s+/g, ' ').trim(), version);
+                }
             } catch (err) {
-                alert('文字認識中にエラーが発生しました。もう一度お試しください。');
+                if (version === inkVersion) {
+                    recognizedTextEl.textContent = '認識に失敗しました。インターネット接続を確認して、もう一度書いてください';
+                    recognizedTextEl.className = 'flex-1 text-sm text-red-500';
+                }
             } finally {
-                submitBtn.disabled = false;
-                clearCanvasBtn.disabled = false;
-                ocrStatus.classList.add('hidden');
+                setOcrBusy(-1);
             }
         }
 
-        // 「書き直す」：確認画面を閉じてキャンバスに戻る（キャンバスは白紙に）
-        reviewRedrawBtn.addEventListener('click', () => {
-            showHandwritingDrawView();
-            clearCanvasDisplay();
-        });
-
-        // 「この内容で採点する」：確認・修正済みのテキストで採点する
-        reviewConfirmBtn.addEventListener('click', () => {
+        // 「回答する」：いま表示されている認識結果で採点する
+        async function submitHandwriting() {
             if (isWaitingForNext) {
                 showNextWord();
                 return;
             }
-            const val = getReviewValue();
-            if (val === '') return; // 空欄は無視
-            checkAnswer(val);
-        });
+            if (isDrawing || canvasLocked) return;
 
-        // 確認画面のEnterキーでの採点は、各文字ボックスのkeydownハンドラ内で処理する
+            // 認識待ち・認識中に押された場合は、今すぐ認識して結果を待つ
+            if (recognizedVersion !== inkVersion) {
+                await recognizeNow();
+            }
+            if (isWaitingForNext || recognizedVersion !== inkVersion) return; // 失敗、または認識中に書き足された
+            if (recognizedText === '') return; // 何も認識されていない場合は無視
+            checkAnswer(recognizedText);
+        }
 
         // ===== ファイル読み込み・開始 =====
 
@@ -919,18 +1002,19 @@
                 inputHintWord.classList.add('hidden');
                 inputHintSentence.classList.add('hidden');
                 showHandwritingDrawView();
-                // 例文モードは複数行書けるようキャンバスを縦に広めにする
-                answerCanvas.style.height = (contentType === 'sentence') ? '220px' : '150px';
+                getOcrWorker().catch(() => {}); // 認識エンジンを先に読み込んでおく
+                // キュビナのように大きな解答スペースを確保（例文モードは複数行書けるよう更に広く）
+                answerCanvas.style.height = (contentType === 'sentence') ? '360px' : '260px';
                 // レイアウト確定後にキャンバスの描画解像度を初期化
                 requestAnimationFrame(() => setupCanvasContext());
             } else {
                 handwritingArea.classList.add('hidden');
-                handwritingReview.classList.add('hidden');
                 submitBtn.textContent = '回答する';
             }
 
             submitBtn.disabled = false;
-            clearCanvasBtn.disabled = false;
+            setCanvasToolsDisabled(false);
+            selectTool('pen'); // 問題開始時はペンに戻す
 
             totalWordsInRound = vocabQueue.length;
             correctCount = 0;
@@ -1009,10 +1093,9 @@
             feedbackArea.classList.remove('hidden');
             feedbackArea.innerHTML = '';
 
-            // 手書きモードのときは、採点に使われたテキスト（確認・修正済み）を見せておく
+            // 手書きモードのときは、採点に使われた認識結果を見せておく
             if (inputMode === 'handwriting') {
                 handwritingArea.classList.add('hidden');
-                handwritingReview.classList.add('hidden');
             }
             const recognizedLine = (inputMode === 'handwriting')
                 ? `<div class="text-xs text-gray-500">🖊 回答: 「${escapeHtml(rawInput)}」</div>`
@@ -1167,7 +1250,7 @@
 
         submitBtn.addEventListener('click', () => {
             if (inputMode === 'handwriting') {
-                handleRecognizeClick();
+                submitHandwriting();
             } else {
                 checkAnswer();
             }
