@@ -1,9 +1,1296 @@
-説と時エンターを押すと次の問題に行くんだけどその時自動で改行されるからどうにかして
-English.html を修正しました。動作確認はまだしていません。
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>単語・例文タイピングテスト</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Excelファイルを読み込むためのライブラリ（SheetJS） -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- 手書き文字認識（OCR）のためのライブラリ（Tesseract.js） -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center p-4">
 
-原因: 解答表示中に Enter を押すと keydown で次の問題に切り替わり、フォーカスが新しい解答欄に移ります。その後、同じ Enter の既定動作（改行の入力）が新しい解答欄に入っていました。
+    <div class="max-w-lg w-full bg-white rounded-xl shadow-lg p-6 space-y-6">
+        <h1 class="text-2xl font-bold text-center text-blue-600">単語・例文タイピングテスト</h1>
 
-修正: 「次の問題へ」の Enter ハンドラ（English.html 1280行目付近）に e.preventDefault() を追加しました。これでその Enter が改行として入力されなくなります。
+        <!-- 1. ファイルアップロード画面 -->
+        <div id="upload-screen" class="space-y-4">
 
-                                                                                                                      ✔ Update installed · Restart to update
-───────────────────────────────────
+            <div class="space-y-2">
+                <p class="text-sm font-semibold text-gray-700">コンテンツの種類</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="content-type" value="word" checked class="accent-blue-500">
+                        単語モード
+                    </label>
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="content-type" value="sentence" class="accent-blue-500">
+                        例文モード
+                    </label>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <p class="text-sm font-semibold text-gray-700">入力方法</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="input-mode" value="keyboard" checked class="accent-purple-500">
+                        キーボードモード
+                    </label>
+                    <label class="flex items-center justify-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50 text-sm font-semibold text-gray-700">
+                        <input type="radio" name="input-mode" value="handwriting" class="accent-purple-500">
+                        手書きモード
+                    </label>
+                </div>
+                <p id="handwriting-note" class="text-xs text-gray-500 hidden">
+                    ※ 手書きモードでは画面に指やマウス・タッチペンで書いた文字をブラウザ内でOCR認識します。書き終えて少し待つと自動で認識され、認識結果が表示されます。違っていたら消しゴムで消して書き直し、合っていたら「回答する」で採点します。ブロック体（活字体）で大きめに書くと認識精度が上がります。
+                </p>
+            </div>
+
+            <p id="upload-desc" class="text-sm text-gray-600 text-center">
+                英単語のExcel形式のファイルを選択してスタートしてください。<br>
+                <span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。</span>
+            </p>
+            <input type="file" id="file-input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100
+            "/>
+
+            <div class="space-y-2">
+                <p class="text-sm font-semibold text-gray-700">モードを選択してください</p>
+                <label class="flex items-start gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+                    <input type="radio" name="test-mode" value="endless" checked class="mt-1 accent-blue-500">
+                    <span class="text-sm">
+                        <strong class="text-gray-800">エンドレスモード</strong><br>
+                        <span id="endless-desc" class="text-xs text-gray-500">間違えた単語は正解するまで繰り返し出題されます</span>
+                    </span>
+                </label>
+                <label class="flex items-start gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50">
+                    <input type="radio" name="test-mode" value="real" class="mt-1 accent-orange-500">
+                    <span class="text-sm">
+                        <strong class="text-gray-800">本当のテストモード</strong><br>
+                        <span id="real-desc" class="text-xs text-gray-500">繰り返しなし、全単語を1回ずつだけ出題する一発勝負です</span>
+                    </span>
+                </label>
+            </div>
+
+            <!-- 例文モードのときだけ表示される採点方法選択 -->
+            <div id="grading-mode-section" class="space-y-2 p-3 border-2 border-gray-200 rounded-lg hidden">
+                <p class="text-sm font-semibold text-gray-700">採点方法</p>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="radio" name="grading-mode" value="strict" checked class="accent-purple-500">
+                    完全一致（句読点・大文字小文字を除く）
+                </label>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="radio" name="grading-mode" value="keypoint" class="accent-purple-500">
+                    キーポイント判定（重要語がすべて含まれていればOK）
+                </label>
+                <p class="text-xs text-gray-500">
+                    ※「キーポイント判定」を選ぶと、B列の後にC列を追加し、そこにカンマ区切りで
+                    必須キーワードを入力できます（例: rain,umbrella）。C列が無い場合は英文中の主要な単語から自動抽出します。
+                </p>
+            </div>
+
+            <button id="start-btn" class="w-full py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition" disabled>
+                テストを開始する
+            </button>
+            <p id="upload-error" class="text-red-500 text-sm text-center hidden"></p>
+        </div>
+
+        <!-- 2. クイズ画面 -->
+        <div id="quiz-screen" class="space-y-6 hidden">
+            <div class="flex justify-between items-center text-sm font-semibold text-gray-500">
+                <span id="progress-label">残り単語数: <span id="progress-value" class="text-blue-600 text-lg">0</span></span>
+                <span>⏱ <span id="timer-display" class="text-blue-600 text-lg">0:00</span></span>
+            </div>
+
+            <div class="text-center space-y-2">
+                <p class="text-gray-500 text-sm">以下の日本語を英語にしてください</p>
+                <h2 id="question-text" class="text-2xl font-bold text-gray-800 break-words leading-relaxed">日本語</h2>
+            </div>
+
+            <div class="space-y-4">
+                <input type="text" id="answer-input-word" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="英語を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-lg text-center" />
+                <textarea id="answer-input-sentence" rows="3" autocomplete="off" placeholder="英語の例文を入力..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-base resize-none hidden"></textarea>
+
+                <div id="handwriting-area" class="space-y-2 hidden">
+                    <!-- ペンツールバー（ペン／消しゴム／1つ戻す／全消し） -->
+                    <div class="flex gap-2">
+                        <button id="tool-pen-btn" type="button" data-tool="pen" class="tool-btn flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition">
+                            ✏️ ペン
+                        </button>
+                        <button id="tool-eraser-btn" type="button" data-tool="eraser" class="tool-btn flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition">
+                            🧽 消しゴム
+                        </button>
+                        <button id="undo-canvas-btn" type="button" class="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border-2 border-transparent hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                            ↩︎ 戻す
+                        </button>
+                        <button id="clear-canvas-btn" type="button" class="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold border-2 border-transparent hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                            🗑 全消し
+                        </button>
+                    </div>
+                    <canvas id="answer-canvas" class="w-full border-2 border-gray-300 rounded-xl bg-white touch-none" style="height:260px; display:block; cursor:crosshair;"></canvas>
+                    <!-- 手書きの自動認識結果（書き終えて少し待つと自動で更新される） -->
+                    <div class="flex items-center gap-2 px-3 py-2 border-2 border-purple-200 bg-purple-50 rounded-lg min-h-[3.5rem]">
+                        <span class="text-xs text-purple-500 whitespace-nowrap">認識結果</span>
+                        <span id="recognized-text" class="flex-1 text-xl tracking-wide break-words"></span>
+                        <span id="ocr-status" class="text-xs text-purple-500 whitespace-nowrap hidden">🔍 認識中...</span>
+                    </div>
+                    <p class="text-xs text-gray-400 text-center">認識が違っていたら、消しゴムで消して書き直してください</p>
+                </div>
+
+                <p id="input-hint-word" class="text-xs text-gray-400 text-center">Enter で回答</p>
+                <p id="input-hint-sentence" class="text-xs text-gray-400 text-center hidden">Ctrl+Enter で回答</p>
+                <button id="submit-btn" class="w-full py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition">
+                    回答する
+                </button>
+            </div>
+
+            <div id="feedback-area" class="text-center p-3 rounded-lg hidden space-y-2">
+                <!-- 正解・不正解のフィードバックがここに入ります -->
+            </div>
+
+            <button id="next-btn" class="w-full py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition hidden">
+                次の問題へ (Enter)
+            </button>
+        </div>
+
+        <!-- 3. 結果画面 -->
+        <div id="result-screen" class="space-y-4 hidden">
+            <h2 id="result-title" class="text-3xl font-bold text-green-500 text-center">🎉 全問クリア！</h2>
+            <p id="result-subtitle" class="text-gray-600 text-center">お疲れ様でした。すべてマスターしました！</p>
+            <p id="result-stats" class="text-center text-sm font-semibold text-gray-700"></p>
+
+            <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="grid grid-cols-4 gap-1 bg-gray-100 text-xs font-semibold text-gray-600 px-3 py-2">
+                    <span id="result-header-ja">単語</span>
+                    <span>英語</span>
+                    <span class="text-right">間違え</span>
+                    <span class="text-right">発音</span>
+                </div>
+                <div id="result-list" class="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                    <!-- 結果一覧がここに入ります -->
+                </div>
+            </div>
+
+            <!-- 再テスト機能：エンドレスモードのときのみ表示 -->
+            <div id="retest-section" class="space-y-2 pt-2 border-t border-gray-200">
+                <p id="retest-label" class="text-sm text-gray-600 text-center">何回以上間違えた単語を再テストしますか？</p>
+                <div class="flex gap-2 items-center">
+                    <input type="number" id="retest-threshold" min="1" value="1" class="w-20 px-3 py-2 border-2 border-gray-300 rounded-lg text-center focus:outline-none focus:border-orange-500" />
+                    <span class="text-sm text-gray-500">回以上</span>
+                    <button id="retest-btn" class="flex-1 py-2 bg-orange-500 text-white rounded-lg font-bold hover:bg-orange-600 transition">
+                        再テストする
+                    </button>
+                </div>
+                <p id="retest-error" class="text-red-500 text-sm text-center hidden"></p>
+            </div>
+
+            <button onclick="location.reload()" class="w-full py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition">
+                最初からやり直す
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const startBtn = document.getElementById('start-btn');
+        const uploadError = document.getElementById('upload-error');
+        const uploadDesc = document.getElementById('upload-desc');
+        const gradingModeSection = document.getElementById('grading-mode-section');
+        const endlessDesc = document.getElementById('endless-desc');
+        const realDesc = document.getElementById('real-desc');
+
+        const uploadScreen = document.getElementById('upload-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const resultScreen = document.getElementById('result-screen');
+
+        const progressLabel = document.getElementById('progress-label');
+        const progressValue = document.getElementById('progress-value');
+        const timerDisplay = document.getElementById('timer-display');
+        const questionText = document.getElementById('question-text');
+        const answerInputWord = document.getElementById('answer-input-word');
+        const answerInputSentence = document.getElementById('answer-input-sentence');
+        const inputHintWord = document.getElementById('input-hint-word');
+        const inputHintSentence = document.getElementById('input-hint-sentence');
+        const handwritingArea = document.getElementById('handwriting-area');
+        const answerCanvas = document.getElementById('answer-canvas');
+        const clearCanvasBtn = document.getElementById('clear-canvas-btn');
+        const undoCanvasBtn = document.getElementById('undo-canvas-btn');
+        const toolButtons = document.querySelectorAll('.tool-btn');
+        const ocrStatus = document.getElementById('ocr-status');
+        const handwritingNote = document.getElementById('handwriting-note');
+        const recognizedTextEl = document.getElementById('recognized-text');
+        const submitBtn = document.getElementById('submit-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const feedbackArea = document.getElementById('feedback-area');
+
+        const resultList = document.getElementById('result-list');
+        const resultTitle = document.getElementById('result-title');
+        const resultSubtitle = document.getElementById('result-subtitle');
+        const resultStats = document.getElementById('result-stats');
+        const resultHeaderJa = document.getElementById('result-header-ja');
+        const retestSection = document.getElementById('retest-section');
+        const retestLabel = document.getElementById('retest-label');
+        const retestThresholdInput = document.getElementById('retest-threshold');
+        const retestBtn = document.getElementById('retest-btn');
+        const retestError = document.getElementById('retest-error');
+
+        let allWords = [];       // 現在のラウンドの全項目（間違えた回数を保持し続ける、結果画面表示用）
+        let vocabQueue = [];
+        let currentWord = null;
+        let isWaitingForNext = false;
+        let isRetestRound = false;   // 再テスト中かどうか
+        let contentType = 'word';    // 'word' または 'sentence'
+        let inputMode = 'keyboard';  // 'keyboard' または 'handwriting'
+        let testMode = 'endless';    // 'endless' または 'real'
+        let gradingMode = 'strict';  // 'strict' または 'keypoint'（例文モードのみ使用）
+        let totalWordsInRound = 0;   // 本当のテストモードの進捗表示に使用
+        let correctCount = 0;        // 本当のテストモードの正答数
+
+        // 手書きキャンバス関連
+        let canvasCtx = null;
+        let isDrawing = false;
+        let hasDrawing = false;  // キャンバスに何か描かれているか
+        let canvasLocked = false; // 回答確定後～次の問題までの間、描画をロックする
+        let currentTool = 'pen';  // 'pen' または 'eraser'
+        let undoStack = [];       // 「戻す」用：各操作の直前のキャンバス状態 { img, had }
+        const PEN_WIDTH = 4;
+        const ERASER_WIDTH = 28;
+        const UNDO_LIMIT = 15;
+
+        // 手書きの自動認識（OCR）関連
+        const OCR_IDLE_MS = 700;      // ペンを離してから認識を始めるまでの待ち時間
+        let ocrWorkerPromise = null;  // Tesseract のワーカー（初回に作って使い回す）
+        let ocrConfiguredFor = null;  // ワーカーに設定済みの contentType
+        let ocrPending = 0;           // 実行中の認識の数（「認識中...」表示用）
+        let recognizeTimer = null;
+        let inkVersion = 0;           // キャンバスが変わるたびに増やす（古い認識結果の破棄用）
+        let recognizedText = '';
+        let recognizedVersion = -1;   // recognizedText が対応する inkVersion
+
+        let timerInterval = null;
+        let elapsedSeconds = 0;
+
+        // ===== コンテンツ種類（単語 / 例文）に応じたUI切り替え =====
+
+        function applyContentTypeUI() {
+            const selected = document.querySelector('input[name="content-type"]:checked').value;
+
+            if (selected === 'word') {
+                uploadDesc.innerHTML = '英単語のExcel形式のファイルを選択してスタートしてください。<br><span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。</span>';
+                gradingModeSection.classList.add('hidden');
+                endlessDesc.textContent = '間違えた単語は正解するまで繰り返し出題されます';
+                realDesc.textContent = '繰り返しなし、全単語を1回ずつだけ出題する一発勝負です';
+                progressLabel.firstChild.textContent = '残り単語数: ';
+                resultHeaderJa.textContent = '単語';
+                retestLabel.textContent = '何回以上間違えた単語を再テストしますか？';
+            } else {
+                uploadDesc.innerHTML = '日本語の例文・英語の例文が入ったExcelファイルを選択してスタートしてください。<br><span class="text-xs">※A列・B列のどちらかが日本語/英語であれば自動判別します。1行に1例文を入れてください。</span>';
+                gradingModeSection.classList.remove('hidden');
+                endlessDesc.textContent = '間違えた例文は正解するまで繰り返し出題されます';
+                realDesc.textContent = '繰り返しなし、全例文を1回ずつだけ出題する一発勝負です';
+                progressLabel.firstChild.textContent = '残り例文数: ';
+                resultHeaderJa.textContent = '例文';
+                retestLabel.textContent = '何回以上間違えた例文を再テストしますか？';
+            }
+        }
+
+        document.querySelectorAll('input[name="content-type"]').forEach(el => {
+            el.addEventListener('change', applyContentTypeUI);
+        });
+        applyContentTypeUI();
+
+        // 入力方法（キーボード／手書き）選択の変更で、手書きモードの注意書きを表示切替
+        function applyInputModeUploadUI() {
+            const selected = document.querySelector('input[name="input-mode"]:checked').value;
+            handwritingNote.classList.toggle('hidden', selected !== 'handwriting');
+        }
+        document.querySelectorAll('input[name="input-mode"]').forEach(el => {
+            el.addEventListener('change', applyInputModeUploadUI);
+        });
+        applyInputModeUploadUI();
+
+        // OSを判定して、回答ショートカットの表示をMacは「⌘+Enter」、
+        // Windows/その他は「Ctrl+Enter」に出し分ける
+        function isMacPlatform() {
+            const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
+            return /Mac|iPhone|iPad|iPod/i.test(platform);
+        }
+        inputHintSentence.textContent = isMacPlatform() ? '⌘+Enter で回答' : 'Ctrl+Enter で回答';
+
+        // ===== ユーティリティ関数 =====
+
+        function hasJapanese(str) {
+            return /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(str);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        // 短縮形 → フル形 の変換テーブル（"isn't"⇔"is not" のように、
+        // 短縮形でもフル形でも同じ回答として判定できるようにするため）
+        const CONTRACTIONS = [
+            ["isn't", "is not"], ["aren't", "are not"], ["wasn't", "was not"], ["weren't", "were not"],
+            ["don't", "do not"], ["doesn't", "does not"], ["didn't", "did not"],
+            ["can't", "cannot"], ["couldn't", "could not"], ["shouldn't", "should not"], ["wouldn't", "would not"],
+            ["won't", "will not"], ["mustn't", "must not"], ["shan't", "shall not"], ["ain't", "is not"],
+            ["haven't", "have not"], ["hasn't", "has not"], ["hadn't", "had not"],
+            ["i'm", "i am"], ["you're", "you are"], ["he's", "he is"], ["she's", "she is"], ["it's", "it is"],
+            ["we're", "we are"], ["they're", "they are"],
+            ["i've", "i have"], ["you've", "you have"], ["we've", "we have"], ["they've", "they have"],
+            ["i'll", "i will"], ["you'll", "you will"], ["he'll", "he will"], ["she'll", "she will"],
+            ["we'll", "we will"], ["they'll", "they will"], ["it'll", "it will"],
+            ["i'd", "i would"], ["you'd", "you would"], ["he'd", "he would"], ["she'd", "she would"],
+            ["we'd", "we would"], ["they'd", "they would"], ["it'd", "it would"],
+            ["let's", "let us"], ["that's", "that is"], ["there's", "there is"], ["here's", "here is"],
+            ["what's", "what is"], ["who's", "who is"], ["where's", "where is"], ["when's", "when is"],
+            ["why's", "why is"], ["how's", "how is"]
+        ];
+
+        // 短縮形をフル形に展開する（大文字小文字を区別せず、単語境界でマッチ）
+        function expandContractions(str) {
+            let s = str;
+            for (const [contraction, expanded] of CONTRACTIONS) {
+                const pattern = new RegExp(`\\b${contraction.replace("'", "['’]")}\\b`, 'gi');
+                s = s.replace(pattern, expanded);
+            }
+            return s;
+        }
+
+        // 文を正規化（短縮形の展開・句読点除去・小文字化・空白整理）
+        // — 単語モード／例文モードの完全一致採点、キーポイント抽出・判定のすべてで使用
+        function normalizeSentence(str) {
+            let s = String(str).toLowerCase();
+            s = expandContractions(s);
+            s = s.replace(/[.,!?;:'’"()\-]/g, ' ');
+            s = s.replace(/\s+/g, ' ').trim();
+            return s;
+        }
+
+        function tokenize(str) {
+            return normalizeSentence(str).split(' ').filter(Boolean);
+        }
+
+        // ストップワード（キーワード自動抽出時に除外する一般的な語）
+        const STOPWORDS = new Set([
+            'a','an','the','is','am','are','was','were','be','been','being',
+            'to','of','in','on','at','for','and','or','but','with','as','by',
+            'this','that','these','those','it','its','i','you','he','she','we','they',
+            'do','does','did','have','has','had','will','would','can','could','should',
+            'not','so','if','than','then','there','here'
+        ]);
+
+        // C列のキーワード指定が無い場合、英文から重要語を自動抽出する
+        function autoExtractKeywords(enSentence) {
+            const tokens = tokenize(enSentence);
+            const keywords = tokens.filter(t => t.length >= 4 && !STOPWORDS.has(t));
+            return keywords.length > 0 ? keywords : tokens;
+        }
+
+        // ===== 音声（青年男性風）の選択 =====
+
+        let cachedVoices = [];
+
+        function loadVoices() {
+            cachedVoices = window.speechSynthesis.getVoices();
+        }
+        if ('speechSynthesis' in window) {
+            loadVoices();
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        function getYoungMaleVoice() {
+            const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+            const englishVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+
+            const maleKeywords = [
+                'male', 'david', 'mark', 'daniel', 'alex', 'guy', 'fred',
+                'aaron', 'eric', 'james', 'tom', 'ryan', 'matthew', 'brian', 'justin'
+            ];
+            let found = englishVoices.find(v =>
+                maleKeywords.some(k => v.name.toLowerCase().includes(k))
+            );
+
+            return found || englishVoices[0] || null;
+        }
+
+        function speakWord(word) {
+            if (!('speechSynthesis' in window)) {
+                alert('お使いのブラウザは音声読み上げに対応していません。');
+                return;
+            }
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(word);
+
+            const voice = getYoungMaleVoice();
+            if (voice) {
+                utterance.voice = voice;
+                utterance.lang = voice.lang;
+            } else {
+                utterance.lang = 'en-US';
+            }
+
+            utterance.rate = (contentType === 'word') ? 1.0 : 0.95;
+            utterance.pitch = 1.2;
+            speechSynthesis.speak(utterance);
+        }
+
+        function createSpeakButton(word, extraClass) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.innerHTML = '🔊';
+            btn.title = '発音を聞く';
+            btn.className = extraClass;
+            btn.addEventListener('click', () => speakWord(word));
+            return btn;
+        }
+
+        // 単語モード：1文字ずつ比較して間違っている箇所をハイライト
+        function buildSpellDiff(rawInput, correctWord) {
+            const maxLen = Math.max(rawInput.length, correctWord.length);
+            let userHtml = '';
+            let correctHtml = '';
+
+            for (let i = 0; i < maxLen; i++) {
+                const uChar = rawInput[i] ?? '';
+                const cChar = correctWord[i] ?? '';
+                const isMatch = uChar !== '' && uChar.toLowerCase() === cChar.toLowerCase();
+
+                if (uChar !== '') {
+                    const cls = isMatch ? 'text-gray-500' : 'text-red-600 font-bold underline';
+                    userHtml += `<span class="${cls}">${escapeHtml(uChar)}</span>`;
+                }
+                if (cChar !== '') {
+                    const cls = isMatch ? 'text-gray-800' : 'text-red-600 font-bold underline';
+                    correctHtml += `<span class="${cls}">${escapeHtml(cChar)}</span>`;
+                }
+            }
+            return { userHtml, correctHtml };
+        }
+
+        // 例文モード：単語単位で入力とお手本を比較し、異なる単語をハイライト
+        function buildWordDiff(rawInput, correctSentence) {
+            const userTokens = String(rawInput).trim().split(/\s+/).filter(Boolean);
+            const correctTokens = String(correctSentence).trim().split(/\s+/).filter(Boolean);
+            const maxLen = Math.max(userTokens.length, correctTokens.length);
+
+            let userHtml = [];
+            let correctHtml = [];
+
+            for (let i = 0; i < maxLen; i++) {
+                const uTok = userTokens[i] ?? '';
+                const cTok = correctTokens[i] ?? '';
+                const isMatch = uTok !== '' && normalizeSentence(uTok) === normalizeSentence(cTok);
+
+                if (uTok !== '') {
+                    const cls = isMatch ? 'text-gray-500' : 'text-red-600 font-bold underline';
+                    userHtml.push(`<span class="${cls}">${escapeHtml(uTok)}</span>`);
+                }
+                if (cTok !== '') {
+                    const cls = isMatch ? 'text-gray-800' : 'text-red-600 font-bold underline';
+                    correctHtml.push(`<span class="${cls}">${escapeHtml(cTok)}</span>`);
+                }
+            }
+            return { userHtml: userHtml.join(' '), correctHtml: correctHtml.join(' ') };
+        }
+
+        // キーポイント判定：必須キーワードがすべて含まれているかチェック
+        function checkKeypoints(rawInput, keywords) {
+            const inputTokens = new Set(tokenize(rawInput));
+            const missing = keywords.filter(k => !inputTokens.has(normalizeSentence(k)));
+            return { passed: missing.length === 0, missing };
+        }
+
+        // ===== タイマー =====
+
+        function startTimer() {
+            stopTimer();
+            elapsedSeconds = 0;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                elapsedSeconds++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const m = Math.floor(elapsedSeconds / 60);
+            const s = elapsedSeconds % 60;
+            timerDisplay.textContent = `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return `${m}分${String(s).padStart(2, '0')}秒`;
+        }
+
+        // ===== 回答入力欄のヘルパー（単語モード=input / 例文モード=textarea） =====
+
+        function getAnswerElement() {
+            return (contentType === 'word') ? answerInputWord : answerInputSentence;
+        }
+
+        function getAnswerValue() {
+            return getAnswerElement().value.trim();
+        }
+
+        function setAnswerValue(val) {
+            getAnswerElement().value = val;
+        }
+
+        function focusAnswerInput() {
+            getAnswerElement().focus();
+        }
+
+        function setAnswerDisabled(disabled) {
+            answerInputWord.disabled = disabled;
+            answerInputSentence.disabled = disabled;
+        }
+
+        // ===== 手書き入力（キャンバス）関連 =====
+
+        // キャンバスの表示サイズに合わせて描画解像度を設定し直す（高DPI画面でも綺麗に描画するため）
+        function setupCanvasContext() {
+            const rect = answerCanvas.getBoundingClientRect();
+            const ratio = window.devicePixelRatio || 1;
+            answerCanvas.width = Math.max(1, Math.round(rect.width * ratio));
+            answerCanvas.height = Math.max(1, Math.round(rect.height * ratio));
+            canvasCtx = answerCanvas.getContext('2d');
+            canvasCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            canvasCtx.lineWidth = 4;
+            canvasCtx.lineCap = 'round';
+            canvasCtx.lineJoin = 'round';
+            canvasCtx.strokeStyle = '#1f2937';
+            clearCanvasDisplay();
+        }
+
+        // キャンバスを白紙に戻す（OCRの認識精度のため、背景は常に白で塗りつぶす）
+        function fillCanvasWhite() {
+            const rect = answerCanvas.getBoundingClientRect();
+            canvasCtx.fillStyle = '#ffffff';
+            canvasCtx.fillRect(0, 0, rect.width, rect.height);
+        }
+
+        // 新しい問題・キャンバス再初期化用：白紙に戻し、「戻す」の履歴も消す
+        function clearCanvasDisplay() {
+            if (!canvasCtx) return;
+            fillCanvasWhite();
+            hasDrawing = false;
+            undoStack = [];
+            updateUndoButton();
+            resetRecognition();
+        }
+
+        // ===== ペンツール（ペン／消しゴム／戻す／全消し） =====
+
+        function updateUndoButton() {
+            undoCanvasBtn.disabled = undoStack.length === 0;
+        }
+
+        // 操作の直前にキャンバスの状態を保存する（「戻す」で復元するため）
+        function pushUndoSnapshot() {
+            undoStack.push({
+                img: canvasCtx.getImageData(0, 0, answerCanvas.width, answerCanvas.height),
+                had: hasDrawing
+            });
+            if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+            updateUndoButton();
+        }
+
+        function undoCanvas() {
+            if (!canvasCtx || canvasLocked || undoStack.length === 0) return;
+            const snap = undoStack.pop();
+            canvasCtx.putImageData(snap.img, 0, 0);
+            hasDrawing = snap.had;
+            updateUndoButton();
+            scheduleRecognition();
+        }
+
+        function selectTool(tool) {
+            currentTool = tool;
+            toolButtons.forEach(btn => {
+                const active = btn.dataset.tool === tool;
+                btn.classList.toggle('bg-purple-500', active);
+                btn.classList.toggle('text-white', active);
+                btn.classList.toggle('border-purple-500', active);
+                btn.classList.toggle('bg-gray-100', !active);
+                btn.classList.toggle('text-gray-700', !active);
+                btn.classList.toggle('border-transparent', !active);
+                btn.classList.toggle('hover:bg-gray-200', !active);
+            });
+            answerCanvas.style.cursor = (tool === 'eraser') ? 'cell' : 'crosshair';
+        }
+
+        // 認識中などはツール操作を無効にする
+        function setCanvasToolsDisabled(disabled) {
+            clearCanvasBtn.disabled = disabled;
+            toolButtons.forEach(btn => { btn.disabled = disabled; });
+            undoCanvasBtn.disabled = disabled || undoStack.length === 0;
+        }
+
+        function getCanvasPoint(e) {
+            const rect = answerCanvas.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+
+        function startDrawing(e) {
+            if (!canvasCtx || canvasLocked) return; // 回答済み・待機中は描画不可
+            pushUndoSnapshot();
+            isDrawing = true;
+            // 書いている間は認識を待たせ、認識中の古い結果も破棄する
+            clearTimeout(recognizeTimer);
+            inkVersion++;
+            const isEraser = (currentTool === 'eraser');
+            if (!isEraser) hasDrawing = true;
+            // 消しゴムは白で塗りつぶす（OCRのため背景は常に白）
+            canvasCtx.strokeStyle = isEraser ? '#ffffff' : '#1f2937';
+            canvasCtx.lineWidth = isEraser ? ERASER_WIDTH : PEN_WIDTH;
+
+            const p = getCanvasPoint(e);
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(p.x, p.y);
+            // タップだけでも点が打てるように（i の点やピリオド用）
+            canvasCtx.lineTo(p.x + 0.01, p.y);
+            canvasCtx.stroke();
+            // キャンバス外に出ても線が途切れないようにする
+            try { answerCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+            e.preventDefault();
+        }
+
+        function drawMove(e) {
+            if (!isDrawing || !canvasCtx) return;
+            const p = getCanvasPoint(e);
+            canvasCtx.lineTo(p.x, p.y);
+            canvasCtx.stroke();
+            e.preventDefault();
+        }
+
+        function stopDrawing() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            scheduleRecognition(); // ペンを離したら、少し待って自動で認識する
+        }
+
+        // マウス・タッチ・ペンをまとめて扱えるPointer Eventsを使用
+        answerCanvas.addEventListener('pointerdown', startDrawing);
+        answerCanvas.addEventListener('pointermove', drawMove);
+        window.addEventListener('pointerup', stopDrawing);
+        window.addEventListener('pointercancel', stopDrawing);
+
+        toolButtons.forEach(btn => {
+            btn.addEventListener('click', () => selectTool(btn.dataset.tool));
+        });
+        undoCanvasBtn.addEventListener('click', undoCanvas);
+
+        // 全消しも「戻す」で取り消せる
+        clearCanvasBtn.addEventListener('click', () => {
+            if (!canvasCtx || canvasLocked || !hasDrawing) return;
+            pushUndoSnapshot();
+            fillCanvasWhite();
+            hasDrawing = false;
+            scheduleRecognition();
+        });
+
+        selectTool('pen');
+
+        window.addEventListener('resize', () => {
+            if (inputMode === 'handwriting' && !quizScreen.classList.contains('hidden')) {
+                setupCanvasContext();
+            }
+        });
+
+        // ===== 手書き文字の自動認識（書き終えて少し待つと、ボタンなしで自動でOCR） =====
+
+        // 手書き入力の表示を初期状態にする（回答ボタンはこの表示のときだけ「回答する」）
+        function showHandwritingDrawView() {
+            handwritingArea.classList.remove('hidden');
+            submitBtn.classList.remove('hidden');
+            submitBtn.textContent = '回答する';
+        }
+
+        function renderRecognizedText() {
+            if (recognizedText === '') {
+                recognizedTextEl.textContent = '手書きで英語を書いてください';
+                recognizedTextEl.className = 'flex-1 text-sm text-gray-400';
+            } else {
+                recognizedTextEl.textContent = recognizedText;
+                recognizedTextEl.className = 'flex-1 text-xl font-bold text-gray-800 tracking-wide break-words';
+            }
+        }
+
+        function setRecognizedText(text, version) {
+            recognizedText = text;
+            recognizedVersion = version;
+            renderRecognizedText();
+        }
+
+        // 新しい問題・キャンバス初期化のとき：認識結果と待機中の認識を破棄する
+        function resetRecognition() {
+            clearTimeout(recognizeTimer);
+            recognizeTimer = null;
+            inkVersion++;
+            setRecognizedText('', inkVersion);
+        }
+
+        // キャンバスが変わったので、少し待ってから自動で認識する（書き足すたびに待ち直す）
+        function scheduleRecognition() {
+            clearTimeout(recognizeTimer);
+            inkVersion++;
+            if (!hasDrawing) {
+                setRecognizedText('', inkVersion);
+                return;
+            }
+            recognizeTimer = setTimeout(recognizeNow, OCR_IDLE_MS);
+        }
+
+        function getOcrWorker() {
+            if (!ocrWorkerPromise) {
+                if (typeof Tesseract === 'undefined') {
+                    return Promise.reject(new Error('Tesseract is not loaded'));
+                }
+                ocrWorkerPromise = Tesseract.createWorker('eng').catch(err => {
+                    ocrWorkerPromise = null; // 次回やり直せるように
+                    throw err;
+                });
+            }
+            return ocrWorkerPromise;
+        }
+
+        // 単語は「1行」、例文は「複数行のブロック」として読ませ、使う文字も絞って精度を上げる
+        async function configureOcrWorker(worker) {
+            if (ocrConfiguredFor === contentType) return;
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+            await worker.setParameters({
+                tessedit_pageseg_mode: (contentType === 'word') ? '7' : '6',
+                tessedit_char_whitelist: (contentType === 'word')
+                    ? letters + "'-"
+                    : letters + "0123456789.,!?'-"
+            });
+            ocrConfiguredFor = contentType;
+        }
+
+        // 書かれた部分だけを切り出して余白をつけた画像を作る（OCRは余白があるほうが精度が高い）
+        // 何も書かれていない（消しゴムで全部消した）場合は null
+        function buildOcrImage() {
+            const w = answerCanvas.width;
+            const h = answerCanvas.height;
+            const data = canvasCtx.getImageData(0, 0, w, h).data;
+            let minX = w, minY = h, maxX = -1, maxY = -1;
+            for (let y = 0; y < h; y++) {
+                const row = y * w * 4;
+                for (let x = 0; x < w; x++) {
+                    if (data[row + x * 4] < 200) { // 白背景より十分暗い画素 = インク
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+            if (maxX < 0) return null;
+
+            const ratio = window.devicePixelRatio || 1;
+            const inkW = maxX - minX + 1;
+            const inkH = maxY - minY + 1;
+            // 単語：文字の高さを約80pxに揃える／例文：見た目の大きさ（CSSピクセル）のまま
+            const scale = (contentType === 'word')
+                ? Math.min(2, Math.max(0.3, 80 / inkH))
+                : 1 / ratio;
+            const pad = 24;
+
+            const out = document.createElement('canvas');
+            out.width = Math.max(1, Math.round(inkW * scale)) + pad * 2;
+            out.height = Math.max(1, Math.round(inkH * scale)) + pad * 2;
+            const octx = out.getContext('2d');
+            octx.fillStyle = '#ffffff';
+            octx.fillRect(0, 0, out.width, out.height);
+            octx.drawImage(answerCanvas, minX, minY, inkW, inkH, pad, pad, out.width - pad * 2, out.height - pad * 2);
+            return out;
+        }
+
+        function setOcrBusy(delta) {
+            ocrPending += delta;
+            ocrStatus.classList.toggle('hidden', ocrPending <= 0);
+        }
+
+        async function recognizeNow() {
+            clearTimeout(recognizeTimer);
+            recognizeTimer = null;
+            const version = inkVersion;
+
+            if (!hasDrawing) {
+                setRecognizedText('', version);
+                return;
+            }
+            const img = buildOcrImage();
+            if (!img) {
+                setRecognizedText('', version);
+                return;
+            }
+
+            setOcrBusy(1);
+            try {
+                const worker = await getOcrWorker();
+                await configureOcrWorker(worker);
+                const { data: { text } } = await worker.recognize(img);
+                // 認識している間に書き足し・消去された場合は、この結果を捨てる（その後の認識が走る）
+                if (version === inkVersion) {
+                    setRecognizedText(text.replace(/\s+/g, ' ').trim(), version);
+                }
+            } catch (err) {
+                if (version === inkVersion) {
+                    recognizedTextEl.textContent = '認識に失敗しました。インターネット接続を確認して、もう一度書いてください';
+                    recognizedTextEl.className = 'flex-1 text-sm text-red-500';
+                }
+            } finally {
+                setOcrBusy(-1);
+            }
+        }
+
+        // 「回答する」：いま表示されている認識結果で採点する
+        async function submitHandwriting() {
+            if (isWaitingForNext) {
+                showNextWord();
+                return;
+            }
+            if (isDrawing || canvasLocked) return;
+
+            // 認識待ち・認識中に押された場合は、今すぐ認識して結果を待つ
+            if (recognizedVersion !== inkVersion) {
+                await recognizeNow();
+            }
+            if (isWaitingForNext || recognizedVersion !== inkVersion) return; // 失敗、または認識中に書き足された
+            if (recognizedText === '') return; // 何も認識されていない場合は無視
+            checkAnswer(recognizedText);
+        }
+
+        // ===== ファイル読み込み・開始 =====
+
+        fileInput.addEventListener('change', (e) => {
+            startBtn.disabled = !(e.target.files.length > 0);
+        });
+
+        startBtn.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            contentType = document.querySelector('input[name="content-type"]:checked').value;
+            inputMode = document.querySelector('input[name="input-mode"]:checked').value;
+            const selectedMode = document.querySelector('input[name="test-mode"]:checked').value;
+            const selectedGrading = document.querySelector('input[name="grading-mode"]:checked').value;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+
+                    let vocabList = [];
+
+                    for (let row of rows) {
+                        if (row.length >= 2 && row[0] != null && row[1] != null) {
+                            let val1 = String(row[0]).trim();
+                            let val2 = String(row[1]).trim();
+                            if (val1 === "" || val2 === "") continue;
+
+                            let ja, en;
+                            if (hasJapanese(val1)) {
+                                ja = val1;
+                                en = val2;
+                            } else {
+                                ja = val2;
+                                en = val1;
+                            }
+
+                            const item = { ja, en, mistakes: 0 };
+
+                            if (contentType === 'sentence') {
+                                // C列があればキーワード指定として使用（カンマ区切り）
+                                let keywords = null;
+                                if (row.length >= 3 && row[2] != null && String(row[2]).trim() !== "") {
+                                    keywords = String(row[2]).split(',').map(k => k.trim()).filter(Boolean);
+                                } else {
+                                    keywords = autoExtractKeywords(en);
+                                }
+                                item.keywords = keywords;
+                            }
+
+                            vocabList.push(item);
+                        }
+                    }
+
+                    if (vocabList.length === 0) {
+                        const label = (contentType === 'word') ? '単語データ' : '例文データ';
+                        throw new Error(`${label}が見つかりませんでした。A列とB列にデータがあるか確認してください。`);
+                    }
+
+                    testMode = selectedMode;
+                    gradingMode = (contentType === 'sentence') ? selectedGrading : 'strict';
+                    isRetestRound = false;
+                    allWords = vocabList;
+                    vocabQueue = shuffleArray([...vocabList]);
+                    startGame();
+
+                } catch (error) {
+                    uploadError.textContent = "エラー: " + error.message;
+                    uploadError.classList.remove('hidden');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // ===== ゲーム進行 =====
+
+        function startGame() {
+            uploadScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            quizScreen.classList.remove('hidden');
+
+            // モードに応じて入力欄（input / textarea）を切り替え
+            if (contentType === 'word') {
+                answerInputWord.classList.remove('hidden');
+                answerInputSentence.classList.add('hidden');
+                inputHintWord.classList.remove('hidden');
+                inputHintSentence.classList.add('hidden');
+                questionText.classList.remove('text-xl');
+                questionText.classList.add('text-2xl');
+            } else {
+                answerInputWord.classList.add('hidden');
+                answerInputSentence.classList.remove('hidden');
+                inputHintWord.classList.add('hidden');
+                inputHintSentence.classList.remove('hidden');
+                questionText.classList.remove('text-2xl');
+                questionText.classList.add('text-xl');
+            }
+
+            // 入力方法（キーボード／手書き）に応じてUIを切り替え
+            if (inputMode === 'handwriting') {
+                answerInputWord.classList.add('hidden');
+                answerInputSentence.classList.add('hidden');
+                inputHintWord.classList.add('hidden');
+                inputHintSentence.classList.add('hidden');
+                showHandwritingDrawView();
+                getOcrWorker().catch(() => {}); // 認識エンジンを先に読み込んでおく
+                // キュビナのように大きな解答スペースを確保（例文モードは複数行書けるよう更に広く）
+                answerCanvas.style.height = (contentType === 'sentence') ? '360px' : '260px';
+                // レイアウト確定後にキャンバスの描画解像度を初期化
+                requestAnimationFrame(() => setupCanvasContext());
+            } else {
+                handwritingArea.classList.add('hidden');
+                submitBtn.textContent = '回答する';
+            }
+
+            submitBtn.disabled = false;
+            setCanvasToolsDisabled(false);
+            selectTool('pen'); // 問題開始時はペンに戻す
+
+            totalWordsInRound = vocabQueue.length;
+            correctCount = 0;
+
+            progressLabel.style.display = (testMode === 'endless') ? 'inline' : 'none';
+
+            startTimer();
+            showNextWord();
+        }
+
+        function showNextWord() {
+            if (vocabQueue.length === 0) {
+                stopTimer();
+                quizScreen.classList.add('hidden');
+                renderResults();
+                resultScreen.classList.remove('hidden');
+                return;
+            }
+
+            isWaitingForNext = false;
+            currentWord = vocabQueue[0];
+
+            if (testMode === 'endless') {
+                progressValue.textContent = vocabQueue.length;
+            } else {
+                const currentIndex = totalWordsInRound - vocabQueue.length + 1;
+                progressLabel.textContent = `問題 ${currentIndex} / ${totalWordsInRound}`;
+            }
+
+            questionText.textContent = currentWord.ja;
+
+            canvasLocked = false;
+
+            if (inputMode === 'handwriting') {
+                showHandwritingDrawView();
+                clearCanvasDisplay();
+            } else {
+                setAnswerValue('');
+                setAnswerDisabled(false);
+                focusAnswerInput();
+            }
+
+            submitBtn.classList.remove('hidden');
+            nextBtn.classList.add('hidden');
+            feedbackArea.classList.add('hidden');
+            feedbackArea.innerHTML = '';
+        }
+
+        function checkAnswer(providedInput) {
+            if (isWaitingForNext) {
+                showNextWord();
+                return;
+            }
+
+            const rawInput = (providedInput !== undefined) ? String(providedInput).trim() : getAnswerValue();
+            if (rawInput === '') return; // 空白入力は無視
+
+            let isCorrect;
+            let missingKeywords = [];
+
+            if (contentType === 'sentence' && gradingMode === 'keypoint') {
+                const result = checkKeypoints(rawInput, currentWord.keywords);
+                isCorrect = result.passed;
+                missingKeywords = result.missing;
+            } else if (contentType === 'sentence') {
+                isCorrect = normalizeSentence(rawInput) === normalizeSentence(currentWord.en);
+            } else {
+                isCorrect = normalizeSentence(rawInput) === normalizeSentence(currentWord.en);
+            }
+
+            isWaitingForNext = true;
+            canvasLocked = true;
+            setAnswerDisabled(true);
+            submitBtn.classList.add('hidden');
+            nextBtn.classList.remove('hidden');
+            feedbackArea.classList.remove('hidden');
+            feedbackArea.innerHTML = '';
+
+            // 手書きモードのときは、採点に使われた認識結果を見せておく
+            if (inputMode === 'handwriting') {
+                handwritingArea.classList.add('hidden');
+            }
+            const recognizedLine = (inputMode === 'handwriting')
+                ? `<div class="text-xs text-gray-500">🖊 回答: 「${escapeHtml(rawInput)}」</div>`
+                : '';
+
+            if (isCorrect) {
+                correctCount++;
+                feedbackArea.className = 'text-center p-3 rounded-lg bg-green-100 text-green-700 border border-green-300 font-bold space-y-2';
+                if (contentType === 'sentence') {
+                    feedbackArea.innerHTML = recognizedLine + '⭕ 正解！<br><span class="text-sm font-normal text-gray-600">お手本: ' + escapeHtml(currentWord.en) + '</span>';
+                } else {
+                    feedbackArea.innerHTML = recognizedLine + '⭕ 正解！';
+                }
+
+                const speakBtn = createSpeakButton(currentWord.en, 'block mx-auto mt-1 text-sm text-green-700 underline');
+                speakBtn.innerHTML = '🔊 発音を聞く';
+                feedbackArea.appendChild(speakBtn);
+
+                vocabQueue.shift();
+            } else {
+                currentWord.mistakes++;
+
+                let bodyHtml;
+                if (contentType === 'word') {
+                    const { userHtml, correctHtml } = buildSpellDiff(rawInput, currentWord.en);
+                    bodyHtml = `
+                        ❌ 不正解...<br>
+                        <span class="text-sm font-normal">あなたの回答:</span> <span class="text-lg tracking-wide">${userHtml}</span><br>
+                        <span class="text-sm font-normal">正解:</span> <span class="text-lg font-bold tracking-wide">${correctHtml}</span>
+                    `;
+                } else if (gradingMode === 'keypoint') {
+                    bodyHtml = `
+                        ❌ 不正解...<br>
+                        <span class="text-sm font-normal">お手本:</span> <span class="text-base font-bold">${escapeHtml(currentWord.en)}</span><br>
+                        <span class="text-sm font-normal text-red-700">不足しているキーポイント: ${missingKeywords.map(escapeHtml).join(', ')}</span>
+                    `;
+                } else {
+                    const { userHtml, correctHtml } = buildWordDiff(rawInput, currentWord.en);
+                    bodyHtml = `
+                        ❌ 不正解...<br>
+                        <span class="text-sm font-normal">あなたの回答:</span><br><span class="text-base">${userHtml}</span><br>
+                        <span class="text-sm font-normal">正解:</span><br><span class="text-base font-bold">${correctHtml}</span>
+                    `;
+                }
+
+                feedbackArea.className = 'text-center p-3 rounded-lg bg-red-100 text-red-700 border border-red-300 space-y-1';
+                feedbackArea.innerHTML = recognizedLine + bodyHtml;
+
+                const speakBtn = createSpeakButton(currentWord.en, 'block mx-auto mt-1 text-sm text-red-700 underline');
+                speakBtn.innerHTML = '🔊 発音を聞く';
+                feedbackArea.appendChild(speakBtn);
+
+                if (testMode === 'endless') {
+                    let wrongWord = vocabQueue.shift();
+                    vocabQueue.push(wrongWord);
+                    vocabQueue = shuffleArray(vocabQueue);
+                } else {
+                    vocabQueue.shift();
+                }
+            }
+
+            nextBtn.focus();
+        }
+
+        // ===== 結果表示 =====
+
+        function renderResults() {
+            const itemLabel = (contentType === 'word') ? '単語' : '例文';
+
+            resultTitle.textContent = isRetestRound ? '🎉 再テストクリア！' : '🎉 全問クリア！';
+            resultSubtitle.textContent = isRetestRound
+                ? `お疲れ様でした。再テストの${itemLabel}をマスターしました！`
+                : `お疲れ様でした。すべての${itemLabel}が終了しました！`;
+
+            const timeText = `⏱ 経過時間: ${formatTime(elapsedSeconds)}`;
+            if (testMode === 'real') {
+                const rate = totalWordsInRound > 0 ? Math.round((correctCount / totalWordsInRound) * 100) : 0;
+                resultStats.textContent = `${timeText} ／ 正答数: ${correctCount} / ${totalWordsInRound}（正答率 ${rate}%）`;
+            } else {
+                resultStats.textContent = timeText;
+            }
+
+            if (testMode === 'real') {
+                retestSection.classList.add('hidden');
+            } else {
+                retestSection.classList.remove('hidden');
+                retestError.classList.add('hidden');
+                retestThresholdInput.value = 1;
+            }
+
+            resultList.innerHTML = '';
+
+            const sorted = [...allWords].sort((a, b) => b.mistakes - a.mistakes);
+
+            for (const word of sorted) {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-4 gap-1 px-3 py-2 text-sm items-start';
+
+                const jaSpan = document.createElement('span');
+                jaSpan.className = 'text-gray-800 break-words';
+                jaSpan.textContent = word.ja;
+
+                const enSpan = document.createElement('span');
+                enSpan.className = 'text-gray-800 break-words';
+                enSpan.textContent = word.en;
+
+                const countSpan = document.createElement('span');
+                countSpan.className = 'text-right ' + (word.mistakes > 0 ? 'text-red-600 font-bold' : 'text-gray-400');
+                countSpan.textContent = `${word.mistakes}回`;
+
+                const speakWrap = document.createElement('span');
+                speakWrap.className = 'text-right';
+                const speakBtn = createSpeakButton(word.en, 'text-lg');
+                speakWrap.appendChild(speakBtn);
+
+                row.appendChild(jaSpan);
+                row.appendChild(enSpan);
+                row.appendChild(countSpan);
+                row.appendChild(speakWrap);
+                resultList.appendChild(row);
+            }
+        }
+
+        // 「〇回以上」間違えた項目だけを対象に再テストを開始する（エンドレスモード専用）
+        function startRetest() {
+            const threshold = Number(retestThresholdInput.value);
+            const itemLabel = (contentType === 'word') ? '単語' : '例文';
+
+            retestError.classList.add('hidden');
+
+            if (!Number.isFinite(threshold) || threshold < 1) {
+                retestError.textContent = "1以上の数値を入力してください。";
+                retestError.classList.remove('hidden');
+                return;
+            }
+
+            const targetWords = allWords.filter(word => word.mistakes >= threshold);
+
+            if (targetWords.length === 0) {
+                retestError.textContent = `${threshold}回以上間違えた${itemLabel}はありませんでした。`;
+                retestError.classList.remove('hidden');
+                return;
+            }
+
+            targetWords.forEach(word => { word.mistakes = 0; });
+
+            isRetestRound = true;
+            allWords = targetWords;
+            vocabQueue = shuffleArray([...targetWords]);
+            startGame();
+        }
+
+        submitBtn.addEventListener('click', () => {
+            if (inputMode === 'handwriting') {
+                submitHandwriting();
+            } else {
+                checkAnswer();
+            }
+        });
+        nextBtn.addEventListener('click', showNextWord);
+        retestBtn.addEventListener('click', startRetest);
+
+        // 単語モード：Enterキーで回答
+        answerInputWord.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkAnswer();
+        });
+
+        // 例文モード：Enterは改行に使い、Ctrl(⌘)+Enterで回答
+        answerInputSentence.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                // このキー操作がdocumentレベルのEnterリスナーまで伝播すると、
+                // checkAnswer内でnextBtnにフォーカスが移った直後に
+                // 同じイベントが「次へ」判定と誤認されて即座に次の問題へ
+                // 進んでしまうため、ここで伝播を止める。
+                e.stopPropagation();
+                checkAnswer();
+            }
+        });
+
+        // 「次の問題へ」待ち状態でのEnterキー対応（両モード共通）
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !nextBtn.classList.contains('hidden') && document.activeElement !== retestThresholdInput) {
+                if (isWaitingForNext && document.activeElement !== answerInputSentence) {
+                    // 次の問題で解答欄にフォーカスが移るため、このEnterの既定動作
+                    // （新しい解答欄への改行挿入）を抑止する
+                    e.preventDefault();
+                    showNextWord();
+                }
+            }
+        });
+
+        retestThresholdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startRetest();
+        });
+    </script>
+</body>
+</html>
